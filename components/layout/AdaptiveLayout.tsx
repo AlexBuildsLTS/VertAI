@@ -1,0 +1,209 @@
+import React from 'react';
+import {
+  View,
+  Text,
+  useWindowDimensions,
+  TouchableOpacity,
+  Image,
+  Platform,
+  StyleSheet,
+} from 'react-native';
+import { useRouter, usePathname } from 'expo-router';
+import { BlurView } from 'expo-blur';
+import { ProfileDropdown } from '../ui/ProfileDropdown';
+import { cn } from '../../lib/utils';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  withSequence,
+} from 'react-native-reanimated';
+
+// Highly optimized background pulse.
+const NeuralGlow = ({ top, right, left, bottom, color }: any) => {
+  const opacity = useSharedValue(0.03);
+
+  React.useEffect(() => {
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.08, { duration: 4000 }),
+        withTiming(0.03, { duration: 4000 }),
+      ),
+      -1,
+      true,
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        animatedStyle,
+        {
+          position: 'absolute',
+          top,
+          right,
+          left,
+          bottom,
+          width: 500,
+          height: 500,
+          backgroundColor: color,
+          borderRadius: 250,
+          ...(Platform.OS === 'web' ? { filter: 'blur(100px)' } : {}),
+        },
+      ]}
+    />
+  );
+};
+
+export const AdaptiveLayout = ({ children }: { children: React.ReactNode }) => {
+  const { width } = useWindowDimensions();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const isDesktop = width >= 1024;
+  const isTablet = width >= 768 && width < 1024;
+
+  const navItems = [
+    { label: '⌬', path: '/', id: 'engine', title: 'ENGINE' },
+    { label: '⧖', path: '/history', id: 'vault', title: 'VAULT' },
+    { label: '⚙', path: '/settings', id: 'params', title: 'PARAMS' },
+  ];
+
+  return (
+    <View className="flex-1 bg-[#020205] relative overflow-hidden">
+      {/* 1. OPTIMIZED AMBIENT BACKGROUND */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <NeuralGlow color="#00F0FF" top="-10%" left="-10%" />
+        <NeuralGlow color="#8A2BE2" bottom="-10%" right="-5%" />
+      </View>
+
+      {/* 2. FLOATING UI ELEMENTS (NO HEADER WRAPPER)
+        These are absolutely positioned to sit sleekly on top of everything.
+      */}
+      {!isDesktop && !isTablet && (
+        <View className="absolute top-12 left-6 z-[1000] pointer-events-box-none">
+          <Image
+            source={require('../../assets/icon.png')}
+            style={{ width: 36, height: 36 }}
+            resizeMode="contain"
+            // TINT COLOR DELETED. REAL IMAGE WILL SHOW.
+          />
+        </View>
+      )}
+
+      {/* Profile Dropdown floating independently on top right */}
+      <View className="absolute top-12 right-6 z-[1000] pointer-events-box-none">
+        <ProfileDropdown />
+      </View>
+
+      <View className="flex-row flex-1">
+        {/* 3. DESKTOP/TABLET SIDEBAR */}
+        {(isDesktop || isTablet) && (
+          <View
+            className={cn(
+              'bg-[#050508]/90 border-r border-white/5 pt-12 items-center z-50',
+              isDesktop ? 'w-24' : 'w-20',
+            )}
+          >
+            <TouchableOpacity
+              onPress={() => router.push('/')}
+              className="mb-16"
+            >
+              <Image
+                source={require('../../assets/icon.png')}
+                style={{ width: 40, height: 40 }}
+                resizeMode="contain"
+                // TINT COLOR DELETED HERE TOO.
+              />
+            </TouchableOpacity>
+
+            <View className="flex-1 gap-y-12 mt-4">
+              {navItems.map((item) => {
+                const isActive =
+                  pathname === item.path ||
+                  (pathname.startsWith(item.path) && item.path !== '/');
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    onPress={() => router.push(item.path as any)}
+                    className="items-center"
+                  >
+                    <View
+                      className={cn(
+                        'w-12 h-12 rounded-2xl items-center justify-center transition-all',
+                        isActive
+                          ? 'bg-[#00F0FF]/10 border border-[#00F0FF]/40 shadow-[0_0_15px_rgba(0,240,255,0.3)]'
+                          : 'bg-transparent border-transparent',
+                      )}
+                    >
+                      <Text
+                        className={cn(
+                          'text-2xl',
+                          isActive ? 'text-[#00F0FF]' : 'text-white/20',
+                        )}
+                      >
+                        {item.label}
+                      </Text>
+                    </View>
+                    <Text
+                      className={cn(
+                        'mt-2 text-[8px] font-black tracking-[3px] uppercase',
+                        isActive ? 'text-[#00F0FF]' : 'text-white/10',
+                      )}
+                    >
+                      {item.title}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* 4. MAIN CONTENT VIEWPORT */}
+        <View className="flex-1">{children}</View>
+      </View>
+
+      {/* 5. MOBILE BOTTOM NAVIGATION */}
+      {!isDesktop && !isTablet && (
+        <View className="absolute bottom-8 left-6 right-6 h-20 z-[100]">
+          <BlurView
+            intensity={Platform.OS === 'web' ? 20 : 60}
+            tint="dark"
+            className="flex-row items-center justify-around h-full rounded-[30px] border border-white/10 bg-black/50 overflow-hidden shadow-2xl"
+          >
+            {navItems.map((item) => {
+              const isActive =
+                pathname === item.path ||
+                (pathname.startsWith(item.path) && item.path !== '/');
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  onPress={() => router.push(item.path as any)}
+                  className="items-center justify-center h-full w-20"
+                >
+                  <Text
+                    className={cn(
+                      'text-3xl',
+                      isActive ? 'text-[#00F0FF]' : 'text-white/20',
+                    )}
+                  >
+                    {item.label}
+                  </Text>
+                  {isActive && (
+                    <View className="absolute bottom-4 w-1.5 h-1.5 rounded-full bg-[#00F0FF] shadow-[0_0_10px_#00F0FF]" />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </BlurView>
+        </View>
+      )}
+    </View>
+  );
+};
