@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    /* Ensures the deep space black is consistent on every single page load */
+    @apply bg-[#020205] text-white overflow-hidden;
+    background-color: #020205;
+  }
+}
+
+@layer components {
+  /* THE GLASS ENGINE: 
+     One class to rule every card. Uses the 64px blur from your config. 
+  */
+  .neural-glass {
+    @apply bg-white/[0.01] border border-white/10 backdrop-blur-3xl rounded-[32px] overflow-hidden;
+    box-shadow: 0 0 40px rgba(0, 240, 255, 0.05);
+  }
+
+  /* THE ORB ENGINE:
+     Persistent animated background nodes that live outside the scroll view.
+  */
+  .neural-bg-node {
+    @apply absolute rounded-full blur-[120px];
+    opacity: 0.05;
+    animation: neural-pulse 10s ease-in-out infinite;
+  }
+}
+
+@keyframes neural-pulse {
+  0%,
+  100% {
+    transform: scale(1) translate(0, 0);
+    opacity: 0.03;
+  }
+  50% {
+    transform: scale(1.3) translate(20px, 20px);
+    opacity: 0.07;
+  }
+}
+
+/* Custom Scrollbar for the Vault and Settings */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.1);
+  border-radius: 10px;
+}
