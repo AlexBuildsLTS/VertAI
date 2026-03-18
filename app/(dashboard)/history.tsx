@@ -1,4 +1,5 @@
 import React, { useMemo, useEffect } from 'react';
+import { format } from 'date-fns';
 import {
   View,
   Text,
@@ -56,7 +57,7 @@ const NeuralOrb = ({ delay = 0, color = '#00F0FF' }) => {
           width: 600,
           height: 600,
           backgroundColor: color,
-          borderRadius: 300,
+          ...(Platform.OS === 'web' ? { filter: 'blur(40px)' } : {}),
           ...(Platform.OS === 'web' ? { filter: 'blur(120px)' } : {}),
         },
       ]}
@@ -66,8 +67,9 @@ const NeuralOrb = ({ delay = 0, color = '#00F0FF' }) => {
 
 export default function HistoryScreen() {
   const router = useRouter();
+  const MOBILE_WIDTH_THRESHOLD = 768;
   const { width } = Dimensions.get('window');
-  const isMobile = width < 768;
+  const isMobile = width < MOBILE_WIDTH_THRESHOLD;
 
   const { data: history, isLoading, error, refetch } = useHistoryData();
 
@@ -179,7 +181,7 @@ export default function HistoryScreen() {
                     {groupedHistory.today.map((item: HistoryItem) => (
                       <TouchableOpacity
                         key={item.id}
-                        onPress={() => router.push(`/video/${item.id}` as any)}
+                        onPress={() => router.push(`/video/${item.id}`)}
                         activeOpacity={0.8}
                       >
                         <GlassCard
@@ -188,7 +190,7 @@ export default function HistoryScreen() {
                         >
                           <View className="flex-1">
                             <Text className="text-base font-bold tracking-wide text-white uppercase">
-                              Payload_{item.id.slice(0, 8)}
+                              Payload_{String(item.id).slice(0, 8)}
                             </Text>
                             <View className="flex-row items-center mt-2">
                               <View
@@ -242,10 +244,10 @@ export default function HistoryScreen() {
                         >
                           <View className="flex-1">
                             <Text className="text-sm font-bold text-white/90 uppercase tracking-wide">
-                              Operation_{item.id.slice(0, 8)}
+                              Operation_{typeof item.id === 'string' ? item.id.slice(0, 8) : String(item.id).slice(0, 8)}
                             </Text>
                             <Text className="text-white/30 text-[9px] font-mono mt-2 uppercase tracking-widest">
-                              {new Date(item.created_at).toLocaleDateString()}
+                              {format(new Date(item.created_at), 'yyyy-MM-dd')}
                             </Text>
                           </View>
                           <Text className="text-neon-purple text-2xl opacity-40">

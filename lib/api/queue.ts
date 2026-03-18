@@ -1,3 +1,4 @@
+//lib/api/queue.ts
 import { supabase } from '../supabase/client';
 import { YouTubeService } from '../../services/youtube';
 import { Database } from '../../types/database/database.types';

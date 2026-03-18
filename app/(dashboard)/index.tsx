@@ -298,7 +298,7 @@ const clearError = useVideoStore((state: { clearError: any }) => state.clearErro
                     : 'text-6xl leading-[55px]',
                 )}
               >
-                YOUTUBE <Text className="text-neon-cyan">TRANSCRIBER</Text>
+                VIDEO <Text className="text-neon-cyan">TRANSCRIBER</Text>
               </Text>
               <View className="h-[2px] w-16 md:w-20 bg-neon-cyan mt-6 md:mt-8 rounded-full shadow-[0_0_20px_#00F0FF]" />
             </View>

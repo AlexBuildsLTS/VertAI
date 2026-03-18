@@ -1,24 +1,26 @@
-import { createAdminClient } from './supabaseAdmin.ts';
-
-import { User } from 'https://esm.sh/@supabase/supabase-js@2.38.4'; // Import User type
 /**
- * Security Layer: Validates the JWT from the request and returns the User object.
- * This ensures that only authenticated SkillSprint users can trigger
- * sensitive Edge Functions like video processing or insight generation.
+ * supabase/functions/_shared/auth.ts
+ * Verifies the Bearer JWT from an incoming request.
+ * Returns the authenticated User or throws on invalid/missing token.
  */
 
-// Utility to verify the user calling the function is authenticated
+import { createAdminClient } from './supabaseAdmin.ts';
+import type { User } from "@supabase/supabase-js";
+
+/**
+ * Validates the Authorization header and returns the Supabase User.
+ * Throws if the token is absent, invalid, or expired.
+ */
 export const verifyUser = async (req: Request): Promise<User> => {
   const authHeader = req.headers.get('Authorization');
-  if (!authHeader) throw new Error('Missing Authorization header');
+  if (!authHeader) throw new Error('Missing Authorization header.');
+
+  const token = authHeader.replace('Bearer ', '').trim();
+  if (!token) throw new Error('Empty Bearer token.');
 
   const supabase = createAdminClient();
-  const token = authHeader.replace('Bearer ', '');
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser(token);
+  const { data: { user }, error } = await supabase.auth.getUser(token);
 
-  if (error || !user) throw new Error('Invalid or expired token');
+  if (error || !user) throw new Error('Invalid or expired token.');
   return user;
 };

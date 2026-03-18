@@ -1,9 +1,10 @@
 export const YouTubeService = {
-  /** 
-   * Extracts the 11-character YouTube video ID from standard and short URLs.
+  /**
+   * services/youtube.ts Extracts the 11-character YouTube video ID from standard and short URLs.
    */
   extractId: (url: string): string | null => {
-    const regex = /(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=|embed\/|v\/|)([\w-]{11})(?:\S+)?/;
+    const regex =
+      /(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=|embed\/|v\/|)([\w-]{11})(?:\S+)?/;
     const match = url.match(regex);
     return match ? match[1] : null;
   },
@@ -13,5 +14,5 @@ export const YouTubeService = {
    */
   isValidUrl: (url: string): boolean => {
     return YouTubeService.extractId(url) !== null;
-  }
+  },
 };

@@ -1,3 +1,4 @@
+//lib/supabase/client.ts
 import 'react-native-url-polyfill/auto'; // REQUIRED for Supabase in React Native
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '../../types/database/database.types';

@@ -1,3 +1,4 @@
+//store/useAuthStore.ts
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase/client'; // Single dot jump to lib
 import { User, Session } from '@supabase/supabase-js';

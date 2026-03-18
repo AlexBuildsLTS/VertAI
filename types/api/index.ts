@@ -10,11 +10,15 @@ export interface AiInsightsPayload {
 }
 
 export interface DeepgramWord {
+  /** Raw word token as returned by Deepgram. */
   word: string;
+  /** Word with punctuation applied (e.g. "Hello," vs "Hello"). Present on Nova-2+. */
+  punctuated_word: string;
   start: number;
   end: number;
   confidence: number;
-  speaker: number;
+  /** Speaker diarisation index; present when diarize is enabled. */
+  speaker?: number;
 }
 
 export interface TranscriptJsonPayload {

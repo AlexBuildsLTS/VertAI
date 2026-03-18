@@ -83,12 +83,14 @@ export default function VideoResultScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 150 }}>
         <FadeIn>
-          <View className="mb-12">
-            <Text className="text-neon-cyan font-bold text-[10px] tracking-[6px] uppercase mb-3">
-              Neural_Decryption_Complete
-            </Text>
+        <View className="items-center mb-10 md:mb-16">
+            <View className="px-4 py-1 mb-6 border rounded-full bg-neon-cyan/10 border-neon-cyan/20">
+              <Text className="text-[8px] md:text-[9px] font-black tracking-[5px] text-neon-cyan uppercase">
+                NorthOS
+              </Text>
+            </View>
             <Text className="text-5xl font-black text-white tracking-tighter uppercase leading-[45px]">
-              Intelligence <Text className="text-neon-cyan">Report</Text>
+              TRANSCRIPTION <Text className="text-neon-cyan">GENERATED</Text>
             </Text>
           </View>
         </FadeIn>
@@ -108,7 +110,7 @@ export default function VideoResultScreen() {
           <FadeIn delay={400}>
             <View className="mb-12">
               <Text className="text-white/30 text-[10px] font-bold uppercase tracking-[4px] mb-6">
-                Timeline_Nodes
+                Timeline
               </Text>
               {chapters.map((chapter, i) => (
                 <View
@@ -131,7 +133,7 @@ export default function VideoResultScreen() {
 
         <FadeIn delay={600}>
           <Text className="text-white/30 text-[10px] font-bold uppercase tracking-[4px] mb-6">
-            Raw_Transcript
+            Transcript
           </Text>
           <TranscriptViewer
             transcriptJson={

@@ -123,7 +123,7 @@ export const TranscriptViewer = ({
             </View>
             <View className="flex-1 pt-1">
               <Text className="mb-1 text-[9px] font-black tracking-widest uppercase text-white/30">
-                Node {group.speaker}
+                Chapter {group.speaker}
               </Text>
               <Text className="text-sm leading-6 text-white/90">
                 {group.text}

@@ -15,7 +15,8 @@ export const APP_CONFIG = {
   },
 
   // API Configuration
-  POLLING_INTERVAL_MS: 3000, // How often we check Supabase for video processing status
+  // Must stay in sync with POLL_INTERVAL_MS in hooks/queries/useVideoData.ts
+  POLLING_INTERVAL_MS: 2000, // How often we check Supabase for video processing status
 
   // External Links
   LINKS: {
