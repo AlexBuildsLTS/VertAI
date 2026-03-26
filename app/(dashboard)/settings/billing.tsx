@@ -142,23 +142,16 @@ export default function BillingScreen() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data: member } = await supabase
-        .from('workspace_members')
-        .select('workspace_id')
-        .eq('user_id', user.id)
-        .single();
-      if (!member) return setIsLoading(false);
-
       const { data } = await supabase
-        .from('workspaces')
-        .select('tier, minutes_used_this_month, monthly_minutes_limit')
-        .eq('id', member.workspace_id)
+        .from('profiles')
+        .select('tier, tokens_balance')
+        .eq('id', user.id)
         .single();
 
       if (data) {
         setTier((data.tier as any) ?? 'free');
-        setUsed(data.minutes_used_this_month ?? 0);
-        setLimit(data.monthly_minutes_limit ?? 60);
+        setUsed(0); // Profiles doesn't have minutes_used_this_month
+        setLimit(data.tokens_balance ?? 60);
       }
       setIsLoading(false);
     })();

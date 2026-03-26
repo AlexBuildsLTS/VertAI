@@ -367,7 +367,8 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
-# Browser CORS: OPTIONS preflight has no Authorization header. With verify_jwt = true (default),
+# Browser CORS
+: OPTIONS preflight has no Authorization header. With verify_jwt = true (default),
 # the gateway returns 401 before the function runs — preflight fails. Disable gateway JWT check
 # and validate the Bearer token in code (see process-video/index.ts).
 [functions.process-video]

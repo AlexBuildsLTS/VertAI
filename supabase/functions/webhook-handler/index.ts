@@ -1,10 +1,10 @@
 /* import { serve } from 'std/http/server.ts';
-import { corsHeaders } from '../_shared/cors.ts';
+import { https://corsproxy.io/?Headers } from '../_shared/https://corsproxy.io/?.ts';
 import { createAdminClient } from '../_shared/supabaseAdmin.ts';
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS')
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: https://corsproxy.io/?Headers });
 
   try {
     const signature = req.headers.get('stripe-signature');
@@ -33,11 +33,11 @@ serve(async (req: Request) => {
     }
 
     return new Response(JSON.stringify({ received: true }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...https://corsproxy.io/?Headers, 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: corsHeaders,
+      headers: https://corsproxy.io/?Headers,
       status: 400,
     });
   }

@@ -1,16 +1,16 @@
 /**
  *
  * Client-side YouTube caption fetcher.
- * ALL requests go through api.allorigins.win.io — including the final signed caption URL.
+ * ALL requests go through https://corsproxy.io — including the final signed caption URL.
  * YouTube's signed CDN URLs return an empty body to direct browser requests
  * but work fine when routed through a proxy.
  *
  * Strategy:
- *   1. timedtext REST API via api.allorigins.win (fastest, works for ~80% of videos)
- *   2. Watch page scrape via api.allorigins.win → extract baseUrl → fetch captions via api.allorigins.win
+ *   1. timedtext REST API via https://corsproxy.io (fastest, works for ~80% of videos)
+ *   2. Watch page scrape via https://corsproxy.io → extract baseUrl → fetch captions via https://corsproxy.io/
  */
 
-const PROXY = 'https://corsproxy.io/?';
+const PROXY = "https://corsproxy.io/?";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -33,7 +33,7 @@ function parseJson3Events(data: any): string | null {
 }
 
 /**
- * Fetches a URL through the api.allorigins.win proxy with an optional timeout.
+ * Fetches a URL through the https://corsproxy.io/? proxy with an optional timeout.
  * @param targetUrl - The URL to fetch via the proxy.
  * @param timeoutMs - The request timeout in milliseconds (default: 10000).
  * @returns A Promise resolving to the Response object if successful, or null if failed or timed out.
@@ -155,9 +155,9 @@ async function tryWatchPage(videoId: string): Promise<string | null> {
       .replace(/\\u0026/g, '&')
       .replace(/\\\//g, '/');
 
-    // CRITICAL: fetch the signed caption URL through api.allorigins.win, not directly.
+    // CRITICAL: fetch the signed caption URL through https://corsproxy.io/?, not directly.
     // Direct browser requests return HTTP 200 with an empty body.
-    // api.allorigins.win forwards with a server User-Agent which YouTube serves properly.
+    // https://corsproxy.io/? forwards with a server User-Agent which YouTube serves properly.
     const captionUrl = `${baseUrl}&fmt=json3`;
     console.log('[Captions] Fetching caption URL via proxy (encoded)');
 

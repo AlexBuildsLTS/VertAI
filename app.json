@@ -1,37 +1,68 @@
 {
   "expo": {
-    "name": "transcriber-pro",
+    "name": "Transcriber Pro",
     "slug": "transcriber-pro",
     "version": "1.0.0",
-    "scheme": "transcriber-pro",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "scheme": "transcriber-pro",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#05050A"
+    },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.transcriberpro.app"
+      "bundleIdentifier": "com.transcriberpro.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to scan QR codes and record video for transcription.",
+        "NSMicrophoneUsageDescription": "This app uses the microphone to record audio for transcription."
+      }
     },
     "android": {
+      "package": "com.transcriberpro.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
+        "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#05050A"
       },
-      "package": "com.transcriberpro.app"
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "jsEngine": "jsc"
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
       "expo-video",
-      "expo-audio"
+      "expo-audio",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "1698662c-943e-4660-87e4-c1f5ceffc6bd"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/1698662c-943e-4660-87e4-c1f5ceffc6bd"
     }
   }
 }

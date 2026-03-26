@@ -3,7 +3,7 @@
  * Client-side audio URL resolution for ANY video platform.
  * Bypasses datacenter IP blocks by running on user's residential IP.
  *
- * Priority: RapidAPI → Piped → Invidious → Cobalt
+ * Priority: Direct Link → RapidAPI → Piped → Invidious → Cobalt
  * Supports: YouTube, Vimeo, TikTok, Twitter, and more via Cobalt
  */
 
@@ -94,7 +94,6 @@ async function directFetch(
     return null;
   }
 }
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // YOUTUBE AUDIO METHODS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -310,6 +309,14 @@ export async function fetchYouTubeAudioUrl(
   const startTime = Date.now();
 
   const platform = detectPlatform(videoUrl);
+
+  // 🟢 ADDED: Handle direct links immediately
+  if (platform === 'direct') {
+    console.log(
+      `[Audio] Direct media link detected. Bypassing extraction (${Date.now() - startTime}ms)`,
+    );
+    return videoUrl;
+  }
 
   // YouTube-specific methods (most reliable)
   if (platform === 'youtube') {
