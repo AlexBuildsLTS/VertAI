@@ -1,11 +1,6 @@
 /**
  * process-video/index.ts
- * Main orchestrator - uses modular services
- *
- * Pipeline:
- * 1. FAST PATH: Caption extraction (getCaptions) - milliseconds, no IP blocking
- * 2. SLOW FALLBACK: Audio + Deepgram STT - only if captions unavailable
- * 3. AI Insights: Gemini (generateInsights) - full quality chapters/summaries
+ * Main orchestrator - Pass-through Architecture
  */
 import { corsHeaders } from '../_shared/cors.ts';
 import { createAdminClient } from '../_shared/supabaseAdmin.ts';
@@ -21,7 +16,6 @@ const log = {
   error: (...args: unknown[]) => console.error('[process-video]', ...args),
 };
 
-// Use Deno.serve() - NOT deprecated serve() import
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -52,8 +46,8 @@ Deno.serve(async (req: Request) => {
     videoId = body.video_id;
     const videoUrl: string = body.video_url ?? body.youtube_url;
     const language: string = body.language ?? 'english';
-    const difficulty: string = body.difficulty ?? 'standard';
     const clientTranscript: string | undefined = body.transcript_text;
+    const clientAudioUrl: string | undefined = body.audio_url; // Captured from frontend
 
     if (!videoId || !videoUrl) {
       return new Response(
@@ -67,18 +61,11 @@ Deno.serve(async (req: Request) => {
 
     const ytId = extractYouTubeId(videoUrl);
     log.info('════════════════════════════════════════════════════════════');
-    log.info(`Starting: videoId=${videoId}`);
-    log.info(`YouTube ID: ${ytId || 'Not a YouTube URL'}`);
-    log.info(`Language: ${language}, Difficulty: ${difficulty}`);
+    log.info(`Processing Request: ${videoId}`);
+    log.info(`Direct Audio provided: ${!!clientAudioUrl}`);
     log.info('════════════════════════════════════════════════════════════');
 
-    await updateStatus('downloading');
-
-    // ══════════════════════════════════════════════════════════════════════
-    // PHASE 1: CAPTION EXTRACTION (FAST PATH)
-    // Tries: timedtext → watch page scrape → invidious → rapidapi → innertube
-    // This bypasses YouTube's datacenter IP blocking - fetches TEXT not media
-    // ══════════════════════════════════════════════════════════════════════
+    // PHASE 1: CAPTIONS
     let transcriptText: string | null = clientTranscript ?? null;
     let transcriptJson: unknown = clientTranscript
       ? { source: 'client', text: clientTranscript }
@@ -86,88 +73,74 @@ Deno.serve(async (req: Request) => {
     let method = clientTranscript ? 'client' : 'unknown';
 
     if (!transcriptText && ytId) {
-      log.info('PHASE 1: Extracting captions (FAST PATH)...');
+      log.info('PHASE 1: Checking for captions...');
       const captionResult = await getCaptions(ytId);
       if (captionResult) {
         transcriptText = captionResult.text;
         transcriptJson = captionResult.json;
         method = captionResult.method;
-        log.info(
-          `PHASE 1 ✓ SUCCESS: ${method} (${transcriptText.length} chars)`,
-        );
-      } else {
-        log.info('PHASE 1: No captions found, proceeding to audio fallback...');
+        log.info(`PHASE 1 ✓: Found via ${method}`);
       }
     }
 
-    // ══════════════════════════════════════════════════════════════════════
-    // PHASE 2: DEEPGRAM STT (SLOW FALLBACK)
-    // Only runs if captions failed - tries: RapidAPI → Innertube → Piped → Invidious
-    // Then sends audio URL to Deepgram Nova-2 for transcription
-    // ══════════════════════════════════════════════════════════════════════
-    if (!transcriptText && ytId) {
-      log.info('PHASE 2: Starting Deepgram STT pipeline...');
+    // PHASE 2: AUDIO FALLBACK (The Fix)
+    if (!transcriptText) {
+      log.info('PHASE 2: Starting STT Pipeline...');
       await updateStatus('transcribing');
 
-      log.info('PHASE 2: Resolving audio URL...');
-      const audioUrl = await getAudioUrl(videoUrl, ytId);
-      log.info('PHASE 2: Audio URL resolved, sending to Deepgram Nova-2...');
+      let finalAudioUrl = clientAudioUrl;
 
-      const deepgramResult = await transcribeAudio(audioUrl);
+      // If client didn't provide a URL, try one last server-side resolve
+      if (!finalAudioUrl && ytId) {
+        log.info('Resolving audio URL on server...');
+        finalAudioUrl = await getAudioUrl(videoUrl, ytId);
+      }
+
+      if (!finalAudioUrl) {
+        throw new Error(
+          'Could not resolve audio URL. YouTube is blocking extraction.',
+        );
+      }
+
+      // 100% Fix: Pass the URL to Deepgram so THEY download it, not us
+      const deepgramResult = await transcribeAudio(finalAudioUrl, {
+        throwOnEmptyTranscript: true,
+      });
       transcriptText = deepgramResult.text;
       transcriptJson = deepgramResult.json;
       method = 'deepgram';
-      log.info(`PHASE 2 ✓ SUCCESS: Deepgram (${transcriptText.length} chars)`);
+      log.info(`PHASE 2 ✓: Deepgram transcription successful`);
     }
 
-    // Validate transcript
     if (!transcriptText || transcriptText.length < 50) {
-      throw new Error(
-        'All transcription methods failed - no captions available and audio extraction blocked',
-      );
+      throw new Error('Transcription resulted in empty or too-short text.');
     }
 
-    // ══════════════════════════════════════════════════════════════════════
-    // SAVE TRANSCRIPT TO DATABASE
-    // ══════════════════════════════════════════════════════════════════════
-    log.info('Saving transcript to database...');
+    // SAVE TRANSCRIPT
+    log.info('Saving results...');
     const { error: tErr } = await supabase.from('transcripts').insert({
       video_id: videoId,
       transcript_text: transcriptText,
       transcript_json: transcriptJson,
-      confidence_score: method.includes('deepgram') ? 0.95 : 1.0,
+      confidence_score: method === 'deepgram' ? 0.95 : 1.0,
       language_code: 'en',
       extraction_method: method,
     });
 
-    if (tErr) {
-      log.error('Transcript save failed:', tErr.message);
-      throw new Error(`Database error: ${tErr.message}`);
-    }
-    log.info('✓ Transcript saved');
+    if (tErr) throw new Error(`DB Transcript Error: ${tErr.message}`);
 
-    // ══════════════════════════════════════════════════════════════════════
-    // PHASE 3: AI INSIGHTS (Gemini - full quality)
-    // Uses your existing insights.ts with intelligent chapter generation
-    // ══════════════════════════════════════════════════════════════════════
+    // PHASE 3: AI INSIGHTS
     await updateStatus('ai_processing');
-    log.info('PHASE 3: Generating AI insights via Gemini...');
-
     const insights = await generateInsights(
       transcriptText,
       language,
-      difficulty,
-    );
-    log.info(
-      `PHASE 3 ✓ SUCCESS: ${insights.chapters?.length || 0} chapters, ${insights.key_takeaways?.length || 0} takeaways`,
+      'standard',
     );
 
-    log.info('Saving AI insights to database...');
     const { error: iErr } = await supabase.from('ai_insights').upsert(
       {
         video_id: videoId,
         ai_model: insights.model,
-        language,
         summary: insights.summary,
         chapters: insights.chapters,
         key_takeaways: insights.key_takeaways,
@@ -177,46 +150,20 @@ Deno.serve(async (req: Request) => {
       { onConflict: 'video_id' },
     );
 
-    if (iErr) {
-      log.warn('AI insights save warning:', iErr.message);
-    } else {
-      log.info('✓ AI insights saved');
-    }
+    if (iErr) log.warn('AI insight save warning:', iErr.message);
 
-    // ══════════════════════════════════════════════════════════════════════
-    // COMPLETE
-    // ══════════════════════════════════════════════════════════════════════
     await updateStatus('completed');
-    log.info('════════════════════════════════════════════════════════════');
-    log.info(`✓ COMPLETE: method=${method}, chars=${transcriptText.length}`);
-    log.info('════════════════════════════════════════════════════════════');
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        video_id: videoId,
-        method,
-        transcript_length: transcriptText.length,
-        has_insights: insights.model !== 'none',
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      },
-    );
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    log.error('════════════════════════════════════════════════════════════');
-    log.error('FATAL:', message);
-    log.error('════════════════════════════════════════════════════════════');
-
-    if (videoId) {
-      await updateStatus('failed', message.substring(0, 250));
-    }
-
-    return new Response(JSON.stringify({ success: false, error: message }), {
+    return new Response(JSON.stringify({ success: true, method }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200, // Return 200 so client can read error
+      status: 200,
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    log.error('FATAL ERROR:', msg);
+    if (videoId) await updateStatus('failed', msg.substring(0, 250));
+    return new Response(JSON.stringify({ success: false, error: msg }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
     });
   }
 });

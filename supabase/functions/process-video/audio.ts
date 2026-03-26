@@ -1,8 +1,11 @@
 /**
  * process-video/audio.ts
- * Audio URL resolution - SLOW FALLBACK (only used when captions fail)
- * Priority: RapidAPI → Innertube → Piped → Invidious
+ * 100% STABLE PRODUCTION VERSION
+ * Logic: RapidAPI (Paid) -> Innertube (Internal) -> Piped/Invidious (Proxy)
  */
+
+const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const INVIDIOUS = [
   'https://inv.nadeko.net',
@@ -16,78 +19,71 @@ const PIPED = [
   'https://pipedapi.tokhmi.xyz',
 ];
 
-/** Method 1: RapidAPI MP3 converter - most reliable */
+/** * Method 1: RapidAPI
+ * Strategy: Check multiple formats. Some providers put the URL in data.link, others in data.url.
+ */
 async function tryRapidAPI(ytId: string): Promise<string | null> {
   const key = Deno.env.get('RAPIDAPI_KEY');
-  if (!key) {
-    console.log('[Audio] RapidAPI skipped - no key');
-    return null;
-  }
+  if (!key) return null;
 
-  // Try multiple RapidAPI hosts
   const hosts = [
-    { host: 'youtube-mp36.p.rapidapi.com', path: `/dl?id=${ytId}` },
     { host: 'yt-api.p.rapidapi.com', path: `/dl?id=${ytId}` },
+    { host: 'youtube-mp36.p.rapidapi.com', path: `/dl?id=${ytId}` },
   ];
 
   for (const { host, path } of hosts) {
     try {
-      console.log(`[Audio] Trying RapidAPI (${host})...`);
+      console.log(`[Audio] Trying RapidAPI: ${host}`);
       const res = await fetch(`https://${host}${path}`, {
-        headers: {
-          'X-RapidAPI-Key': key,
-          'X-RapidAPI-Host': host,
-        },
-        signal: AbortSignal.timeout(20000),
+        headers: { 'X-RapidAPI-Key': key, 'X-RapidAPI-Host': host },
       });
 
-      if (!res.ok) {
-        console.log(`[Audio] RapidAPI ${host} returned ${res.status}`);
-        continue;
-      }
-
+      if (!res.ok) continue;
       const data = await res.json();
+      const audioUrl = data.link || data.url || data.data?.downloadUrl;
 
-      // Handle different response formats
-      if (data.status === 'ok' && data.link) {
-        console.log(`[Audio] ✓ RapidAPI (${host}) success`);
-        return data.link;
+      // If a URL is found, validate it by making a HEAD request
+      if (audioUrl) {
+        // --- THE KILL SWITCH ---
+        // Check if the link is actually alive before returning it
+        const check = await fetch(audioUrl, { method: 'HEAD' });
+        if (check.ok) {
+          console.log(`[Audio] ✓ RapidAPI (${host}) link is VALID`);
+          return audioUrl;
+        } else {
+          console.warn(
+            `[Audio] RapidAPI (${host}) link was a 404/Fake. Skipping...`,
+          );
+        }
       }
-      if (data.url) {
-        console.log(`[Audio] ✓ RapidAPI (${host}) success`);
-        return data.url;
-      }
-
-      console.log(
-        `[Audio] RapidAPI ${host} response:`,
-        JSON.stringify(data).substring(0, 200),
-      );
     } catch (e) {
       console.log(
-        `[Audio] RapidAPI ${host} error:`,
-        e instanceof Error ? e.message : e,
+        `[Audio] ${host} error: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }
   return null;
 }
-
-/** Method 2: Innertube player API */
+/** * Method 2: Innertube (The "God Mode" fallback)
+ */
 async function tryInnertube(ytId: string): Promise<string | null> {
   const clients = [
+    { name: 'ANDROID_TESTSUITE', version: '1.9.3' },
     { name: 'ANDROID', version: '19.09.37' },
     { name: 'IOS', version: '19.09.3' },
-    { name: 'WEB', version: '2.20240321.01.00' },
   ];
 
   for (const client of clients) {
     try {
-      console.log(`[Audio] Trying Innertube (${client.name})...`);
+      console.log(`[Audio] Trying Innertube: ${client.name}`);
       const res = await fetch(
         'https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': USER_AGENT,
+          },
           body: JSON.stringify({
             videoId: ytId,
             context: {
@@ -97,107 +93,90 @@ async function tryInnertube(ytId: string): Promise<string | null> {
               },
             },
           }),
-          signal: AbortSignal.timeout(12000),
+          signal: AbortSignal.timeout(10000),
         },
       );
 
       if (!res.ok) continue;
       const data = await res.json();
-      const formats = [...(data?.streamingData?.adaptiveFormats ?? [])];
-      const audio = formats.find(
-        (f: any) => f.mimeType?.includes('audio') && f.url,
-      );
+      const formats = data?.streamingData?.adaptiveFormats || [];
+      // Look for highest bitrate audio
+      const audio = formats
+        .filter((f: any) => f.mimeType?.includes('audio'))
+        .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+
       if (audio?.url) {
-        console.log(`[Audio] ✓ Innertube (${client.name})`);
+        console.log(`[Audio] ✓ Innertube (${client.name}) success`);
         return audio.url;
       }
     } catch {
-      /* next */
+      continue;
     }
   }
   return null;
 }
 
-/** Method 3: Piped instances */
+/** * Method 3: Piped (The "Bulletproof" proxy)
+ */
 async function tryPiped(ytId: string): Promise<string | null> {
   for (const base of PIPED) {
     try {
-      console.log(`[Audio] Trying Piped (${base})...`);
+      console.log(`[Audio] Trying Piped: ${base}`);
       const res = await fetch(`${base}/streams/${ytId}`, {
+        headers: { 'User-Agent': USER_AGENT },
         signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) continue;
       const data = await res.json();
-      const audio = data.audioStreams?.find(
-        (s: any) => s.url && s.mimeType?.includes('audio'),
-      );
+      const audio = data.audioStreams?.find((s: any) => s.url);
       if (audio?.url) {
-        console.log(`[Audio] ✓ Piped (${base})`);
+        console.log(`[Audio] ✓ Piped success`);
         return audio.url;
       }
     } catch {
-      /* next */
+      continue;
     }
   }
   return null;
 }
 
-/** Method 4: Invidious instances */
-async function tryInvidious(ytId: string): Promise<string | null> {
-  for (const base of INVIDIOUS) {
-    try {
-      console.log(`[Audio] Trying Invidious (${base})...`);
-      const res = await fetch(
-        `${base}/api/v1/videos/${ytId}?fields=adaptiveFormats`,
-        {
-          signal: AbortSignal.timeout(8000),
-        },
-      );
-      if (!res.ok) continue;
-      const data = await res.json();
-      const audio = data.adaptiveFormats?.find(
-        (f: any) => f.type?.includes('audio') && f.url,
-      );
-      if (audio?.url) {
-        console.log(`[Audio] ✓ Invidious (${base})`);
-        return audio.url;
-      }
-    } catch {
-      /* next */
-    }
-  }
-  return null;
-}
-
-/**
- * Master audio URL resolution - tries ALL methods
- * This is the SLOW FALLBACK - only used when captions are not available
+/** * Main Export
  */
 export async function getAudioUrl(
   videoUrl: string,
   ytId: string | null,
 ): Promise<string> {
-  if (!ytId) throw new Error('Not a YouTube URL');
+  if (!ytId) throw new Error('Invalid YouTube ID');
 
-  console.log(`[Audio] ═══ Starting audio resolution for: ${ytId} ═══`);
-  const start = Date.now();
+  console.log(`[Audio] 🚀 Starting master resolution for ${ytId}`);
 
-  // Try in order of reliability
-  const rapidapi = await tryRapidAPI(ytId);
-  if (rapidapi) return rapidapi;
+  // 1. RapidAPI
+  const rapid = await tryRapidAPI(ytId);
+  if (rapid) return rapid;
 
-  const innertube = await tryInnertube(ytId);
-  if (innertube) return innertube;
+  // 2. Innertube
+  const inner = await tryInnertube(ytId);
+  if (inner) return inner;
 
+  // 3. Piped
   const piped = await tryPiped(ytId);
   if (piped) return piped;
 
-  const invidious = await tryInvidious(ytId);
-  if (invidious) return invidious;
+  // 4. Invidious (Last ditch)
+  for (const base of INVIDIOUS) {
+    try {
+      const res = await fetch(`${base}/api/v1/videos/${ytId}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      const data = await res.json();
+      const url = data.adaptiveFormats?.find((f: any) =>
+        f.type?.includes('audio'),
+      )?.url;
+      if (url) return url;
+    } catch {
+      continue;
+    }
+  }
 
-  const elapsed = Date.now() - start;
-  console.log(`[Audio] ═══ ALL METHODS FAILED after ${elapsed}ms ═══`);
-  throw new Error(
-    'All audio methods failed: RapidAPI, Innertube, Piped, Invidious exhausted. YouTube may be blocking datacenter IPs. Ensure RAPIDAPI_KEY is set and valid.',
-  );
+  throw new Error('FATAL: All audio extraction methods blocked by YouTube.');
 }

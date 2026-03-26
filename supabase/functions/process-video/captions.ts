@@ -1,14 +1,18 @@
 /**
  * process-video/captions.ts
- * All caption extraction methods - FAST PATH (no IP blocking)
+ * Multi-method YouTube caption extraction WITH WATCH PAGE SCRAPING
  */
 import { stripVtt, parseJson3 } from './utils.ts';
 
-const INVIDIOUS = [
+const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+const INVIDIOUS_INSTANCES = [
   'https://inv.nadeko.net',
   'https://invidious.privacydev.net',
   'https://iv.ggtyler.dev',
   'https://inv.tux.pizza',
+  'https://yt.drgnz.club',
 ];
 
 interface CaptionResult {
@@ -17,188 +21,114 @@ interface CaptionResult {
   method: string;
 }
 
-/** Method 1: Direct timedtext API - fastest */
+// Method 1: Official YouTube timedtext API
 async function tryTimedtext(ytId: string): Promise<CaptionResult | null> {
   for (const lang of ['en', 'en-US', 'en-GB', 'a.en']) {
     try {
+      console.log(`[Captions] Trying timedtext (${lang})`);
       const res = await fetch(
         `https://www.youtube.com/api/timedtext?v=${ytId}&lang=${lang}&fmt=json3`,
         {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
-          },
+          headers: { 'User-Agent': USER_AGENT },
           signal: AbortSignal.timeout(8000),
-        }
+        },
       );
       if (!res.ok) continue;
       const data = await res.json();
       const text = parseJson3(data);
-      if (text) {
-        console.log(`[Captions] ✓ timedtext (${lang}): ${text.length} chars`);
+      if (text && text.length > 50) {
+        console.log(`[Captions] ✓ timedtext (${lang})`);
         return { text, json: data, method: `timedtext_${lang}` };
       }
-    } catch { /* next */ }
+    } catch (e) {
+      console.warn(
+        `[Captions] timedtext ${lang}:`,
+        e instanceof Error ? e.message : e,
+      );
+    }
   }
   return null;
 }
 
-/** Method 2: THE MAGIC - Scrape ytInitialPlayerResponse from watch page */
+// Method 2: WATCH PAGE SCRAPING - extracts ytInitialPlayerResponse
 async function tryWatchPageScrape(ytId: string): Promise<CaptionResult | null> {
   try {
-    console.log('[Captions] Trying watch page scrape (THE MAGIC)...');
+    console.log('[Captions] Trying watch page scrape...');
     const res = await fetch(`https://www.youtube.com/watch?v=${ytId}`, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': USER_AGENT,
         'Accept-Language': 'en-US,en;q=0.9',
       },
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(10000),
     });
-
     if (!res.ok) return null;
+
     const html = await res.text();
-
-    // Basic bot detection - YouTube returns truncated HTML when blocked
-    if (html.length < 10000) {
-      console.log('[Captions] Watch page too short - bot blocked');
+    const playerMatch = html.match(
+      /ytInitialPlayerResponse\s*=\s*({.+?});\s*(?:var|const|let|<\/script>)/,
+    );
+    if (!playerMatch) {
+      console.warn('[Captions] No ytInitialPlayerResponse');
       return null;
     }
 
-    // Find ytInitialPlayerResponse in the page
-    const marker = 'ytInitialPlayerResponse = {';
-    const markerIdx = html.indexOf(marker);
-    if (markerIdx === -1) {
-      console.log('[Captions] ytInitialPlayerResponse not found');
+    const playerData = JSON.parse(playerMatch[1]);
+    const captionTracks =
+      playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+    if (!captionTracks || captionTracks.length === 0) {
+      console.warn('[Captions] No caption tracks');
       return null;
     }
 
-    // Extract JSON using bracket counting (handles nested objects)
-    const jsonStart = html.indexOf('{', markerIdx);
-    let depth = 0, i = jsonStart;
-    for (; i < html.length && i < jsonStart + 500000; i++) {
-      if (html[i] === '{') depth++;
-      else if (html[i] === '}') {
-        depth--;
-        if (depth === 0) break;
-      }
-    }
-
-    const player = JSON.parse(html.substring(jsonStart, i + 1));
-    const tracks = player?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
-
-    if (!tracks.length) {
-      console.log('[Captions] No caption tracks in player response');
-      return null;
-    }
-
-    // Find best English track (prefer manual over auto-generated)
     const track =
-      tracks.find((t: any) => t.languageCode === 'en' && t.kind !== 'asr') ||
-      tracks.find((t: any) => t.languageCode === 'en') ||
-      tracks.find((t: any) => t.languageCode?.startsWith('en')) ||
-      tracks[0];
-
+      captionTracks.find(
+        (t: any) => t.languageCode === 'en' && t.kind !== 'asr',
+      ) ||
+      captionTracks.find((t: any) => t.languageCode?.startsWith('en')) ||
+      captionTracks[0];
     if (!track?.baseUrl) return null;
 
-    // Fetch the actual caption JSON
-    const captionUrl = track.baseUrl.replace(/\\u0026/g, '&') + '&fmt=json3';
-    const capRes = await fetch(captionUrl, { signal: AbortSignal.timeout(8000) });
+    const capRes = await fetch(`${track.baseUrl}&fmt=json3`, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(8000),
+    });
     if (!capRes.ok) return null;
 
     const capData = await capRes.json();
     const text = parseJson3(capData);
-    if (text) {
-      console.log(`[Captions] ✓ watch page scrape: ${text.length} chars`);
+    if (text && text.length > 50) {
+      console.log(`[Captions] ✓ watchpage_scrape (${text.length} chars)`);
       return { text, json: capData, method: 'watchpage_scrape' };
     }
   } catch (e) {
-    console.log('[Captions] Watch page error:', e instanceof Error ? e.message : e);
-  }
-  return null;
-}
-
-/** Method 3: Invidious public instances */
-async function tryInvidious(ytId: string): Promise<CaptionResult | null> {
-  for (const inst of INVIDIOUS) {
-    try {
-      console.log(`[Captions] Trying Invidious (${inst})...`);
-      const res = await fetch(`${inst}/api/v1/captions/${ytId}`, {
-        signal: AbortSignal.timeout(7000),
-      });
-      if (!res.ok) continue;
-      const list = await res.json();
-      if (!list?.captions?.length) continue;
-
-      const track = list.captions.find((c: any) => c.language_code === 'en') || list.captions[0];
-      if (!track?.url) continue;
-
-      const vttUrl = track.url.startsWith('http') ? track.url : `${inst}${track.url}`;
-      const vttRes = await fetch(vttUrl, { signal: AbortSignal.timeout(6000) });
-      if (!vttRes.ok) continue;
-
-      const text = stripVtt(await vttRes.text());
-      if (text.length > 50) {
-        console.log(`[Captions] ✓ invidious: ${text.length} chars`);
-        return { text, json: { source: 'invidious', url: vttUrl }, method: 'invidious' };
-      }
-    } catch { /* next */ }
-  }
-  return null;
-}
-
-/** Method 4: RapidAPI transcript service */
-async function tryRapidAPI(ytId: string): Promise<CaptionResult | null> {
-  const key = Deno.env.get('RAPIDAPI_KEY');
-  if (!key) return null;
-
-  try {
-    console.log('[Captions] Trying RapidAPI transcript...');
-    const res = await fetch(
-      `https://youtube-transcriptor.p.rapidapi.com/transcript?video_id=${ytId}&lang=en`,
-      {
-        headers: {
-          'X-RapidAPI-Key': key,
-          'X-RapidAPI-Host': 'youtube-transcriptor.p.rapidapi.com',
-        },
-        signal: AbortSignal.timeout(15000),
-      }
+    console.warn(
+      '[Captions] Watch page scrape:',
+      e instanceof Error ? e.message : e,
     );
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    const item = Array.isArray(data) ? data[0] : data;
-    if (!item) return null;
-
-    const text =
-      item.transcriptionAsText ||
-      (Array.isArray(item.transcription)
-        ? item.transcription.map((s: any) => s.text ?? '').join(' ')
-        : '');
-
-    if (text && text.length > 50) {
-      console.log(`[Captions] ✓ rapidapi: ${text.length} chars`);
-      return { text, json: data, method: 'rapidapi' };
-    }
-  } catch { /* fail */ }
+  }
   return null;
 }
 
-/** Method 5: Innertube player API */
+// Method 3: Innertube API
 async function tryInnertube(ytId: string): Promise<CaptionResult | null> {
   const clients = [
     { name: 'WEB', version: '2.20240321.01.00' },
+    { name: 'TVHTML5', version: '7.20240321.08.00' },
     { name: 'ANDROID', version: '19.09.37' },
     { name: 'IOS', version: '19.09.3' },
   ];
 
   for (const client of clients) {
     try {
-      console.log(`[Captions] Trying Innertube (${client.name})...`);
+      console.log(`[Captions] Trying Innertube (${client.name})`);
       const res = await fetch(
         'https://www.youtube.com/youtubei/v1/player?prettyPrint=false',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': USER_AGENT,
+          },
           body: JSON.stringify({
             videoId: ytId,
             context: {
@@ -211,54 +141,149 @@ async function tryInnertube(ytId: string): Promise<CaptionResult | null> {
             },
           }),
           signal: AbortSignal.timeout(12000),
-        }
+        },
       );
-
       if (!res.ok) continue;
-      const data = await res.json();
-      const tracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
-      if (!tracks.length) continue;
 
-      const track = tracks.find((t: any) => t.languageCode === 'en' && !t.kind) || tracks[0];
+      const data = await res.json();
+      const track =
+        data?.captions?.playerCaptionsTracklistRenderer?.captionTracks?.find(
+          (t: any) => t.languageCode === 'en' && t.kind !== 'asr',
+        ) ||
+        data?.captions?.playerCaptionsTracklistRenderer?.captionTracks?.[0];
       if (!track?.baseUrl) continue;
 
-      const capUrl = `${track.baseUrl}&fmt=json3`;
-      const capRes = await fetch(capUrl, { signal: AbortSignal.timeout(10000) });
+      const capRes = await fetch(`${track.baseUrl}&fmt=json3`, {
+        signal: AbortSignal.timeout(10000),
+      });
       if (!capRes.ok) continue;
 
       const capData = await capRes.json();
       const text = parseJson3(capData);
-      if (text) {
-        console.log(`[Captions] ✓ innertube (${client.name}): ${text.length} chars`);
-        return { text, json: capData, method: `innertube_${client.name.toLowerCase()}` };
+      if (text && text.length > 50) {
+        console.log(`[Captions] ✓ Innertube (${client.name})`);
+        return {
+          text,
+          json: capData,
+          method: `innertube_${client.name.toLowerCase()}`,
+        };
       }
-    } catch { /* next */ }
+    } catch (e) {
+      console.warn(
+        `[Captions] Innertube ${client.name}:`,
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+  return null;
+}
+
+// Method 4: RapidAPI transcript service
+async function tryRapidAPI(ytId: string): Promise<CaptionResult | null> {
+  const key = Deno.env.get('RAPIDAPI_KEY');
+  if (!key) {
+    console.log('[Captions] RAPIDAPI_KEY not set');
+    return null;
+  }
+
+  try {
+    console.log('[Captions] Trying RapidAPI transcript');
+    const res = await fetch(
+      `https://youtube-transcriptor.p.rapidapi.com/transcript?video_id=${ytId}&lang=en`,
+      {
+        headers: {
+          'X-RapidAPI-Key': key,
+          'X-RapidAPI-Host': 'youtube-transcriptor.p.rapidapi.com',
+        },
+        signal: AbortSignal.timeout(15000),
+      },
+    );
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const text = Array.isArray(data)
+      ? data.map((item: any) => item.text).join(' ')
+      : null;
+    if (text && text.length > 50) {
+      console.log(`[Captions] ✓ RapidAPI`);
+      return { text, json: data, method: 'rapidapi' };
+    }
+  } catch (e) {
+    console.warn('[Captions] RapidAPI:', e instanceof Error ? e.message : e);
+  }
+  return null;
+}
+
+// Method 5: Invidious instances
+async function tryInvidious(ytId: string): Promise<CaptionResult | null> {
+  for (const inst of INVIDIOUS_INSTANCES) {
+    try {
+      console.log(`[Captions] Trying Invidious: ${inst}`);
+      const res = await fetch(`${inst}/api/v1/captions/${ytId}`, {
+        signal: AbortSignal.timeout(7000),
+      });
+      if (!res.ok) continue;
+      const list = await res.json();
+      if (!list?.captions?.length) continue;
+
+      const track =
+        list.captions.find((c: any) => c.language_code === 'en') ||
+        list.captions[0];
+      if (!track?.url) continue;
+
+      const vttUrl = track.url.startsWith('http')
+        ? track.url
+        : `${inst}${track.url}`;
+      const vttRes = await fetch(vttUrl, { signal: AbortSignal.timeout(6000) });
+      if (!vttRes.ok) continue;
+
+      const text = stripVtt(await vttRes.text());
+      if (text.length > 50) {
+        console.log(`[Captions] ✓ Invidious: ${inst}`);
+        return {
+          text,
+          json: { source: 'invidious', url: vttUrl },
+          method: 'invidious',
+        };
+      }
+    } catch (e) {
+      console.warn(
+        `[Captions] Invidious ${inst}:`,
+        e instanceof Error ? e.message : e,
+      );
+    }
   }
   return null;
 }
 
 /**
- * Master caption extraction - tries ALL methods in order of reliability
- * This is the FAST PATH - fetches text only, bypasses YouTube IP blocking
+ * Main export - tries all methods in sequence:
+ * timedtext → watchpage_scrape → innertube → rapidapi → invidious
  */
 export async function getCaptions(ytId: string): Promise<CaptionResult | null> {
-  console.log(`[Captions] ═══ Starting extraction for: ${ytId} ═══`);
-  const start = Date.now();
+  console.log(`[Captions] ═══ Starting for: ${ytId} ═══`);
+  const startTime = Date.now();
 
-  const result =
-    (await tryTimedtext(ytId)) ??
-    (await tryWatchPageScrape(ytId)) ??  // THE MAGIC - added!
-    (await tryInvidious(ytId)) ??
-    (await tryRapidAPI(ytId)) ??
-    (await tryInnertube(ytId)) ??
-    null;
+  const methods = [
+    tryTimedtext,
+    tryWatchPageScrape,
+    tryInnertube,
+    tryRapidAPI,
+    tryInvidious,
+  ];
 
-  const elapsed = Date.now() - start;
-  if (result) {
-    console.log(`[Captions] ═══ SUCCESS in ${elapsed}ms via ${result.method} ═══`);
-  } else {
-    console.log(`[Captions] ═══ ALL METHODS FAILED after ${elapsed}ms ═══`);
+  for (const method of methods) {
+    const result = await method(ytId);
+    if (result) {
+      console.log(
+        `[Captions] ═══ SUCCESS in ${Date.now() - startTime}ms via ${result.method} ═══`,
+      );
+      return result;
+    }
   }
 
-  return result;
+  console.log(
+    `[Captions] ═══ ALL FAILED after ${Date.now() - startTime}ms ═══`,
+  );
+  return null;
 }

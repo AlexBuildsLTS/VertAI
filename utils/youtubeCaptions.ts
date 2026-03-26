@@ -1,19 +1,24 @@
 /**
  *
  * Client-side YouTube caption fetcher.
- * ALL requests go through corsproxy.io — including the final signed caption URL.
+ * ALL requests go through api.allorigins.win.io — including the final signed caption URL.
  * YouTube's signed CDN URLs return an empty body to direct browser requests
  * but work fine when routed through a proxy.
  *
  * Strategy:
- *   1. timedtext REST API via corsproxy (fastest, works for ~80% of videos)
- *   2. Watch page scrape via corsproxy → extract baseUrl → fetch captions via corsproxy
+ *   1. timedtext REST API via api.allorigins.win (fastest, works for ~80% of videos)
+ *   2. Watch page scrape via api.allorigins.win → extract baseUrl → fetch captions via api.allorigins.win
  */
 
 const PROXY = 'https://corsproxy.io/?';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * Parses YouTube's JSON3 caption events and returns the concatenated transcript text.
+ * @param data - The JSON object containing caption events.
+ * @returns The transcript as a single string, or null if unavailable or too short.
+ */
 function parseJson3Events(data: any): string | null {
   if (!data?.events?.length) return null;
   const text = data.events
@@ -28,9 +33,10 @@ function parseJson3Events(data: any): string | null {
 }
 
 /**
- * Fetch any URL through corsproxy.
- * encodeURIComponent is REQUIRED — & in the target URL must not reach corsproxy
- * as query params, or it will only forward up to the first &.
+ * Fetches a URL through the api.allorigins.win proxy with an optional timeout.
+ * @param targetUrl - The URL to fetch via the proxy.
+ * @param timeoutMs - The request timeout in milliseconds (default: 10000).
+ * @returns A Promise resolving to the Response object if successful, or null if failed or timed out.
  */
 async function proxyFetch(
   targetUrl: string,
@@ -51,6 +57,15 @@ async function proxyFetch(
 }
 
 // ── Method 1: timedtext JSON REST API ─────────────────────────────────────────
+
+/**
+ * Attempts to fetch English captions using YouTube's timedtext JSON REST API via proxy.
+ * Tries several English language codes in order of preference.
+ * Returns the transcript as a plain string if successful, or null otherwise.
+ *
+ * @param videoId - The YouTube video ID.
+ * @returns The transcript as a string, or null if unavailable.
+ */
 async function tryTimedtext(videoId: string): Promise<string | null> {
   for (const lang of ['en', 'en-US', 'en-GB', 'a.en']) {
     try {
@@ -70,6 +85,16 @@ async function tryTimedtext(videoId: string): Promise<string | null> {
   }
   return null;
 }
+
+// ── Method 2: watch page scrape → baseUrl → fetch via proxy ───────────────────
+
+/**
+ * Attempts to fetch YouTube captions by scraping the watch page via a proxy,
+ * extracting the player response JSON, and retrieving the caption track URL.
+ * This method is used as a fallback if the timedtext API fails.
+ * @param videoId - The YouTube video ID.
+ * @returns The transcript as a string, or null if unavailable.
+ */
 
 // ── Method 2: watch page scrape → baseUrl → fetch via proxy ───────────────────
 async function tryWatchPage(videoId: string): Promise<string | null> {
@@ -130,9 +155,9 @@ async function tryWatchPage(videoId: string): Promise<string | null> {
       .replace(/\\u0026/g, '&')
       .replace(/\\\//g, '/');
 
-    // CRITICAL: fetch the signed caption URL through corsproxy, not directly.
+    // CRITICAL: fetch the signed caption URL through api.allorigins.win, not directly.
     // Direct browser requests return HTTP 200 with an empty body.
-    // corsproxy forwards with a server User-Agent which YouTube serves properly.
+    // api.allorigins.win forwards with a server User-Agent which YouTube serves properly.
     const captionUrl = `${baseUrl}&fmt=json3`;
     console.log('[Captions] Fetching caption URL via proxy (encoded)');
 
@@ -188,9 +213,16 @@ export async function fetchYouTubeCaptions(
 }
 
 /**
- * Extracts the 11-character YouTube video ID from any valid YouTube URL.
- * Handles: watch?v=, youtu.be/, embed/, shorts/, and m.youtube.com variants.
- * Returns null for non-YouTube URLs.
+ * Extracts a YouTube video ID from various URL formats.
+ * This regex matches:
+ * - youtu.be/<id>
+ * - youtube.com/embed/<id>
+ * - youtube.com/v/<id>
+ * - youtube.com/watch?v=<id>
+ * - youtube.com/watch?<params>&v=<id>
+ * - youtube.com/shorts/<id>
+ * - youtube.com/m/watch?v=<id>
+ * It captures the 11-character video ID in the first group.
  */
 export function extractYouTubeId(url: string): string | null {
   const match = url.match(

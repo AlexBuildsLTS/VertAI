@@ -1,55 +1,264 @@
-// This defines the strict shape of the JSON returned by Gemini and stored in Supabase.
-export interface AiInsightsPayload {
+/**
+ * types/api/index.ts
+ * Comprehensive type definitions for TranscriberPro API layer.
+ * Covers Edge Functions, responses, and domain models.
+ */
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VIDEO PROCESSING TYPES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type VideoStatus =
+  | 'queued'
+  | 'downloading'
+  | 'transcribing'
+  | 'ai_processing'
+  | 'completed'
+  | 'failed';
+
+export type ExtractionMethod =
+  | 'timedtext'
+  | 'watchpage_scrape'
+  | 'innertube'
+  | 'invidious'
+  | 'rapidapi'
+  | 'deepgram'
+  | 'client'
+  | 'unknown';
+
+export type ContentDifficulty = 'beginner' | 'standard' | 'advanced';
+
+export type SupportedLanguage =
+  | 'english'
+  | 'spanish'
+  | 'french'
+  | 'german'
+  | 'italian'
+  | 'portuguese'
+  | 'dutch'
+  | 'polish'
+  | 'russian'
+  | 'japanese'
+  | 'korean'
+  | 'chinese';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EDGE FUNCTION REQUEST/RESPONSE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface ProcessVideoRequest {
+  video_id: string;
+  video_url: string;
+  language?: string;
+  difficulty?: ContentDifficulty;
+  transcript_text?: string | null; // Client-side pre-fetched captions
+  audio_url?: string | null; // Client-side pre-fetched audio URL
+}
+
+export interface ProcessVideoResponse {
+  success: boolean;
+  video_id: string;
+  method: ExtractionMethod;
+  transcript_length: number;
+  has_insights: boolean;
+  error?: string;
+}
+
+export interface CaptionResult {
+  text: string;
+  json: unknown;
+  method: ExtractionMethod;
+  language?: string;
+  confidence?: number;
+}
+
+export interface AudioResult {
+  url: string;
+  method: string;
+  quality?: string;
+  mime_type?: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI INSIGHTS TYPES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface Chapter {
+  timestamp: string; // "00:00" or "01:23:45"
+  title: string; // "Introduction to Machine Learning"
+  description: string; // 2-4 sentence summary
+  start_seconds?: number; // Computed from timestamp
+}
+
+export interface SeoMetadata {
+  tags: string[];
+  suggested_titles: string[];
+  description: string; // 150-160 chars
+}
+
+export interface AiInsights {
+  model: string;
+  language: string;
   summary: string;
-  chapterMarkers: ReadonlyArray<{ time: string; title: string }>;
-  seo_metadata: {
-    seoTags: ReadonlyArray<string>;
-    suggested_titles: ReadonlyArray<string>;
-    description: string;
-  };
+  chapters: Chapter[];
+  key_takeaways: string[];
+  seo_metadata: SeoMetadata;
+  tokens_used?: number;
 }
 
-export interface DeepgramWord {
-  /** Raw word token as returned by Deepgram. */
-  word: string;
-  /**
-   * Word with punctuation applied (e.g. "Hello," vs "Hello").
-   * Present when using Deepgram's Nova-2 and later models.
-   */
-  punctuated_word: string;
-  /** Speaker diarisation index (integer); present when diarize is enabled. */
-  speaker?: number;
-  confidence: number;
+export interface InsightsRequest {
+  video_id: string;
+  transcript_text: string;
+  language?: string;
+  difficulty?: ContentDifficulty;
 }
 
-/**
- * Represents a single transcription alternative within a Deepgram channel.
- * Includes the full transcript, a confidence score, and word-level details.
- */
-export interface TranscriptAlternative {
-  transcript: string;
-  confidence: number;
-  words: ReadonlyArray<DeepgramWord>;
+export interface InsightsResponse {
+  success: boolean;
+  insights: AiInsights;
+  error?: string;
 }
 
-/**
- * Represents a single audio channel from Deepgram's transcription API.
- * Contains an array of transcription alternatives.
- */
-export interface TranscriptChannel {
-  alternatives: ReadonlyArray<TranscriptAlternative>;
+// ═══════════════════════════════════════════════════════════════════════════════
+// TRANSCRIPT TYPES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface TranscriptSegment {
+  start: number; // Start time in seconds
+  end: number; // End time in seconds
+  text: string; // Segment text
+  speaker?: string; // Speaker ID (if diarization enabled)
+  confidence?: number; // 0-1 confidence score
 }
 
-/**
- * Represents the JSON payload returned by Deepgram's transcription API.
- * The structure is deeply nested:
- * - `results.channels` is an array of audio channels (usually one for mono, two for stereo).
- * - Each channel contains `alternatives`, which are possible transcriptions (typically one, but can be more).
- * - Each alternative includes the full transcript, a confidence score, and an array of `DeepgramWord` objects for word-level detail.
- * This interface is used to parse and process raw transcription results in the application.
- */
-export interface TranscriptJsonPayload {
-  results: {
-    channels: ReadonlyArray<TranscriptChannel>;
-  };
+export interface TranscriptJson {
+  segments: TranscriptSegment[];
+  language?: string;
+  duration?: number;
+  word_count?: number;
+  source: ExtractionMethod;
 }
+
+export interface Transcript {
+  id: string;
+  video_id: string;
+  language_code: string;
+  transcript_text: string;
+  transcript_json: TranscriptJson | null;
+  confidence_score: number;
+  word_count: number;
+  extraction_method: ExtractionMethod;
+  created_at: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VIDEO TYPES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface Video {
+  id: string;
+  user_id: string;
+  youtube_url: string;
+  youtube_video_id: string | null;
+  title: string | null;
+  thumbnail_url: string | null;
+  duration_seconds: number | null;
+  status: VideoStatus;
+  error_message: string | null;
+  processing_provider: string | null;
+  audio_url: string | null;
+  processing_started_at: string | null;
+  processing_completed_at: string | null;
+  processing_duration_ms: number | null;
+  retry_count: number;
+  last_retry_at: string | null;
+  batch_job_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VideoWithRelations extends Video {
+  transcripts: Transcript[];
+  ai_insights: AiInsights | null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EXPORT TYPES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type ExportFormat = 'txt' | 'srt' | 'vtt' | 'json' | 'docx' | 'md';
+
+export interface ExportOptions {
+  format: ExportFormat;
+  includeTimestamps?: boolean;
+  includeSpeakers?: boolean;
+  includeChapters?: boolean;
+  includeSummary?: boolean;
+}
+
+export interface ExportResult {
+  content: string;
+  filename: string;
+  mimeType: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BATCH PROCESSING TYPES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type BatchStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export interface BatchJob {
+  id: string;
+  user_id: string;
+  name: string;
+  status: BatchStatus;
+  total_videos: number;
+  completed_videos: number;
+  failed_videos: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BatchSubmitRequest {
+  video_urls: string[];
+  name?: string;
+  language?: string;
+  difficulty?: ContentDifficulty;
+}
+
+export interface BatchSubmitResponse {
+  batch_id: string;
+  total_videos: number;
+  queued_videos: string[];
+  invalid_urls: string[];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ERROR TYPES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface ApiError {
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+export const ERROR_CODES = {
+  INVALID_URL: 'INVALID_URL',
+  NOT_AUTHENTICATED: 'NOT_AUTHENTICATED',
+  RATE_LIMITED: 'RATE_LIMITED',
+  TRANSCRIPTION_FAILED: 'TRANSCRIPTION_FAILED',
+  AI_PROCESSING_FAILED: 'AI_PROCESSING_FAILED',
+  VIDEO_NOT_FOUND: 'VIDEO_NOT_FOUND',
+  UNSUPPORTED_FORMAT: 'UNSUPPORTED_FORMAT',
+  QUOTA_EXCEEDED: 'QUOTA_EXCEEDED',
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+} as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

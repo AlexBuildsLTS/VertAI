@@ -1,146 +1,66 @@
 # ==============================================================================
-# NORTH STUDIO — ENTERPRISE .GITIGNORE
-# Stack: Expo v55, React Native, Supabase, Deno, NativeWind, Skia
+# NORTH STUDIO — CLEAN ENTERPRISE .GITIGNORE
+# Targets: Expo v55, Supabase, Deno, Root Environment
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# 1. DEPENDENCIES & PACKAGE MANAGERS
-# ------------------------------------------------------------------------------
+# --- 1. DEPENDENCIES ---
 node_modules/
 .pnp
-.pnp.js
-.pnp.cjs
+.pnp.*
+.deno/
+vendor/
+deno.lock
 
-# Package Manager Debug Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# ------------------------------------------------------------------------------
-# 2. EXPO & REACT NATIVE CACHES
-# ------------------------------------------------------------------------------
+# --- 2. EXPO & NATIVE ---
 .expo/
 dist/
 web-build/
-expo-env.d.ts
-.metro-health-check*
-.GEMINI.md
-# EAS (Expo Application Services) Local State
+ios/
+android/
 .eas/
-# Note: eas.json is NOT ignored, it is required for build configurations.
-
-# ------------------------------------------------------------------------------
-# 3. NATIVE DIRECTORIES (Auto-generated via Prebuild)
-# ------------------------------------------------------------------------------
-# These folders are ephemeral in a Managed Expo workflow. They are generated
-# via `npx expo prebuild` and should never be committed.
-/ios
-/android
 .kotlin/
-*.orig.*
-
-# ------------------------------------------------------------------------------
-# 4. SECRETS, CERTIFICATES & KEYS (CRITICAL SECURITY)
-# ------------------------------------------------------------------------------
-# Android Keystores
 *.jks
 *.keystore
-# Apple Provisioning Profiles & Keys
 *.p8
 *.p12
-*.key
 *.mobileprovision
-*.pem
-*.cer
-*.cert
-AuthKey_*.p8
 
-# ------------------------------------------------------------------------------
-# 5. ENVIRONMENT VARIABLES (CRITICAL SECURITY)
-# ------------------------------------------------------------------------------
-# Blocks all variations of environment variables from leaking
+# --- 3. SUPABASE (LOCAL STATE & SECRETS) ---
+# Ignore internal Supabase CLI state
+supabase/.temp/
+supabase/.branches/
+supabase/.env*
+# Ignore local DB data if using local persistence
+supabase/db/data/
+# Whitelist your code
+!supabase/functions/
+!supabase/seed.sql
+!supabase/config.toml
+
+# --- 4. ENVIRONMENT & SECRETS (CRITICAL) ---
 .env
 .env.*
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
-# Explicitly whitelist example templates so team members know what keys are needed
 !.env.example
-!.env.template
 
-# ------------------------------------------------------------------------------
-# 6. SUPABASE & DENO EDGE FUNCTIONS
-# ------------------------------------------------------------------------------
-# Do NOT ignore supabase/functions/ (your Edge code), but DO ignore local state.
-supabase/.temp/
-supabase/.branches/
-supabase/db/data/
-supabase/.env
-supabase/.env.*
-
-
-
-
-# Deno Cache (Used for Edge Functions)
-.deno/
-vendor/
-# Lockfiles from local Deno 2.x use version 5; `supabase functions deploy` bundler errors on them.
-# Deno lockfiles (local only; Supabase deploy can error on v5 lockfiles). Never commit.
-
-
-# ------------------------------------------------------------------------------
-# 7. IDEs & EDITORS
-# ------------------------------------------------------------------------------
-# VS Code (Ignores settings.json and workspace configs)
-.vscode/
-# JetBrains / WebStorm / Android Studio
-.idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-# Xcode Local User Data
-*.xcworkspace/xcuserdata/
-*.xcodeproj/xcuserdata/
+# --- 5. AI & TOOLING ARTIFACTS (CLEANUP) ---
 .claude/
-.remember
+.remember/
 *.GEMINI.md
+*.md
+# Specifically ignore the DB audit reports you mentioned
 *.supabase-db-audit-report.md
-# ------------------------------------------------------------------------------
-# 8. TYPESCRIPT & COMPILER OUTPUT
-# ------------------------------------------------------------------------------
-*.tsbuildinfo
-out/
-build/
 
-# ------------------------------------------------------------------------------
-# 9. LINTING & TESTING CACHES
-# ------------------------------------------------------------------------------
-coverage/
-.nyc_output/
-.eslintcache
-.stylelintcache
-.prettiercache
-
-# ------------------------------------------------------------------------------
-# 10. OS GENERATED FILES
-# ------------------------------------------------------------------------------
-# macOS
+# --- 6. IDE & OS ---
+.vscode/
+.idea/
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-# Windows
-ehthumbs.db
 Thumbs.db
+*.swp
+*.tsbuildinfo
 
-# ------------------------------------------------------------------------------
-# 11. GENERAL LOGS
-# ------------------------------------------------------------------------------
+# --- 7. LOGS & TEMPS ---
 *.log
 logs/
+temp/
+tmp/

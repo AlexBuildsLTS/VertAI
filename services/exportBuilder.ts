@@ -1,184 +1,468 @@
 /**
  * services/exportBuilder.ts
- *
- * Provides utilities to transform Deepgram transcript data and AI insights
- * into common export formats: plain text, SRT, WebVTT, and JSON.
- *
- * All types are sourced from the canonical `types/api` definitions to
- * avoid duplication and ensure consistency across the codebase.
+ * Professional transcript export service.
+ * Supports: TXT, SRT, VTT, JSON, Markdown, DOCX-ready
+ * 
+ * Features:
+ * - Timestamps with chapters
+ * - Speaker diarization
+ * - AI summaries and key takeaways
+ * - SEO metadata
  */
 
 import {
-  TranscriptJsonPayload,
-  AiInsightsPayload,
-  DeepgramWord,
+  formatTimestamp,
+  formatSrtTimestamp,
+  formatVttTimestamp,
+  formatDuration,
+} from '../utils/formatters/time';
+import type {
+  ExportFormat,
+  ExportOptions,
+  ExportResult,
+  Transcript,
+  TranscriptSegment,
+  Chapter,
+  AiInsights,
+  Video,
 } from '../types/api';
-import { formatTranscriptTime } from '../utils/formatters/time';
 
-// Re-export shared types so consumers can import from one place.
-export type { TranscriptJsonPayload, AiInsightsPayload, DeepgramWord };
+// ═══════════════════════════════════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
+interface ExportData {
+  video: Video;
+  transcript: Transcript;
+  insights?: AiInsights | null;
+  segments?: TranscriptSegment[];
+}
 
-/**
- * Resolves the best (highest-confidence) alternative from the first channel.
- * Throws a descriptive error when the payload structure is invalid.
- */
-function resolvePrimaryAlternative(payload: TranscriptJsonPayload) {
-  const channels = payload?.results?.channels;
+const MIME_TYPES: Record<ExportFormat, string> = {
+  txt: 'text/plain',
+  srt: 'application/x-subrip',
+  vtt: 'text/vtt',
+  json: 'application/json',
+  md: 'text/markdown',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+};
 
-  if (!channels?.length) {
-    throw new Error('exportBuilder: transcript payload contains no channels.');
+// ═══════════════════════════════════════════════════════════════════════════════
+// PLAIN TEXT EXPORT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function exportToTxt(data: ExportData, options: ExportOptions): string {
+  const { video, transcript, insights } = data;
+  const lines: string[] = [];
+
+  // Header
+  lines.push('═'.repeat(70));
+  lines.push(`TRANSCRIPT: ${video.title || 'Untitled Video'}`);
+  lines.push('═'.repeat(70));
+  lines.push('');
+
+  // Metadata
+  lines.push(`Source: ${video.youtube_url}`);
+  if (video.duration_seconds) {
+    lines.push(`Duration: ${formatDuration(video.duration_seconds)}`);
+  }
+  lines.push(`Generated: ${new Date().toISOString()}`);
+  lines.push('');
+
+  // Summary
+  if (options.includeSummary && insights?.summary) {
+    lines.push('─'.repeat(70));
+    lines.push('SUMMARY');
+    lines.push('─'.repeat(70));
+    lines.push('');
+    lines.push(insights.summary);
+    lines.push('');
   }
 
-  const alternatives = channels[0].alternatives;
-
-  if (!alternatives?.length) {
-    throw new Error('exportBuilder: first channel contains no alternatives.');
+  // Key Takeaways
+  if (options.includeSummary && insights?.key_takeaways?.length) {
+    lines.push('─'.repeat(70));
+    lines.push('KEY TAKEAWAYS');
+    lines.push('─'.repeat(70));
+    lines.push('');
+    insights.key_takeaways.forEach((takeaway, i) => {
+      lines.push(`${i + 1}. ${takeaway}`);
+    });
+    lines.push('');
   }
 
-  // Deepgram returns alternatives ordered by confidence descending; index 0 is best.
-  return alternatives[0];
-}
-
-/**
- * Formats a timestamp in SRT notation: HH:MM:SS,mmm
- */
-function toSrtTimestamp(seconds: number): string {
-  let ms = Math.round((seconds % 1) * 1000);
-  ms = Math.max(0, Math.min(ms, 999)); // Clamp to 0-999
-  const msStr = ms.toString().padStart(3, '0');
-  return `${formatTranscriptTime(seconds)},${msStr}`;
-}
-
-/**
- * Formats a timestamp in WebVTT notation: HH:MM:SS.mmm
- */
-function toVttTimestamp(seconds: number): string {
-  const ms = Math.floor((seconds % 1) * 1000)
-    .toString()
-    .padStart(3, '0')
-    .slice(0, 3);
-  return `${formatTranscriptTime(seconds)}.${ms}`;
-}
-
-// ---------------------------------------------------------------------------
-// Public export builders
-// ---------------------------------------------------------------------------
-
-/**
- * Returns the full transcript as a single plain-text string.
- *
- * @example
- * const text = exportAsPlainText(transcriptPayload);
- * // "Hello world. This is a test transcript."
- */
-export function exportAsPlainText(payload: TranscriptJsonPayload): string {
-  const { transcript } = resolvePrimaryAlternative(payload);
-
-  if (!transcript.trim()) {
-    throw new Error('exportBuilder: transcript text is empty.');
+  // Chapters
+  if (options.includeChapters && insights?.chapters?.length) {
+    lines.push('─'.repeat(70));
+    lines.push('CHAPTERS');
+    lines.push('─'.repeat(70));
+    lines.push('');
+    insights.chapters.forEach((chapter) => {
+      lines.push(`[${chapter.timestamp}] ${chapter.title}`);
+      if (chapter.description) {
+        lines.push(`    ${chapter.description}`);
+      }
+    });
+    lines.push('');
   }
 
-  return transcript.trim();
-}
+  // Transcript
+  lines.push('─'.repeat(70));
+  lines.push('FULL TRANSCRIPT');
+  lines.push('─'.repeat(70));
+  lines.push('');
 
-/**
- * Groups words into subtitle cues of `wordsPerCue` words and renders them
- * as an SRT (SubRip) string.
- *
- * @param wordsPerCue - Number of words per subtitle block (default: 8)
- */
-export function exportAsSrt(
-  payload: TranscriptJsonPayload,
-  wordsPerCue = 8,
-): string {
-  const { words } = resolvePrimaryAlternative(payload);
-
-  if (!words?.length) {
-    throw new Error(
-      'exportBuilder: no word-level data available for SRT export.',
-    );
+  if (options.includeTimestamps && data.segments?.length) {
+    // With timestamps
+    data.segments.forEach((segment) => {
+      const timestamp = formatTimestamp(segment.start);
+      const speaker = options.includeSpeakers && segment.speaker
+        ? `[${segment.speaker}] `
+        : '';
+      lines.push(`[${timestamp}] ${speaker}${segment.text}`);
+    });
+  } else {
+    // Plain text
+    lines.push(transcript.transcript_text);
   }
 
-  const cues = chunkWords(words, wordsPerCue);
+  lines.push('');
+  lines.push('═'.repeat(70));
+  lines.push('Generated by TranscriberPro');
+  lines.push('═'.repeat(70));
 
-  return cues
-    .map((cue, index) => {
-      const start = toSrtTimestamp(cue[0].start);
-      const end = toSrtTimestamp(cue[cue.length - 1].end);
-      const text = cue.map((w) => w.punctuated_word ?? w.word).join(' ');
-      return `${index + 1}\n${start} --> ${end}\n${text}`;
-    })
-    .join('\n\n');
+  return lines.join('\n');
 }
 
-/**
- * Groups words into subtitle cues of `wordsPerCue` words and renders them
- * as a WebVTT string.
- *
- * @param wordsPerCue - Number of words per subtitle block (default: 8)
- */
-export function exportAsVtt(
-  payload: TranscriptJsonPayload,
-  wordsPerCue = 8,
-): string {
-  const { words } = resolvePrimaryAlternative(payload);
+// ═══════════════════════════════════════════════════════════════════════════════
+// SRT EXPORT
+// ═══════════════════════════════════════════════════════════════════════════════
 
-  if (!words?.length) {
-    throw new Error(
-      'exportBuilder: no word-level data available for VTT export.',
-    );
+function exportToSrt(data: ExportData, options: ExportOptions): string {
+  const segments = data.segments || [];
+
+  if (segments.length === 0) {
+    // Create artificial segments from plain text
+    return createSrtFromPlainText(data.transcript.transcript_text, data.video.duration_seconds);
   }
 
-  const cues = chunkWords(words, wordsPerCue);
+  const lines: string[] = [];
 
-  const body = cues
-    .map((cue) => {
-      const start = toVttTimestamp(cue[0].start);
-      const end = toVttTimestamp(cue[cue.length - 1].end);
-      // Prefer 'punctuated_word' if available, otherwise fall back to 'word'
-      const text = cue.map((w) => w.punctuated_word ?? w.word).join(' ');
-      return `${start} --> ${end}\n${text}`;
-    })
-    .join('\n\n');
+  segments.forEach((segment, index) => {
+    lines.push(String(index + 1));
+    lines.push(`${formatSrtTimestamp(segment.start)} --> ${formatSrtTimestamp(segment.end)}`);
 
-  return `WEBVTT\n\n${body}`;
+    let text = segment.text;
+    if (options.includeSpeakers && segment.speaker) {
+      text = `[${segment.speaker}] ${text}`;
+    }
+    lines.push(text);
+    lines.push('');
+  });
+
+  return lines.join('\n');
 }
-/**
- * Serialises the raw transcript payload and AI insights into a structured
- * JSON string suitable for download or further processing.
- */
-export function exportAsJson(
-  transcript: TranscriptJsonPayload,
-  insights?: AiInsightsPayload,
-): string {
-  const primary = resolvePrimaryAlternative(transcript);
 
-  const output = {
-    transcript: primary.transcript,
-    confidence: primary.confidence,
-    words: primary.words,
-    ...(insights && { insights }),
+function createSrtFromPlainText(text: string, durationSeconds?: number | null): string {
+  const words = text.split(/\s+/);
+  const wordsPerSegment = 15;
+  const totalDuration = durationSeconds || (words.length / 150) * 60; // Estimate if not provided
+  const segmentDuration = totalDuration / Math.ceil(words.length / wordsPerSegment);
+
+  const lines: string[] = [];
+  let segmentIndex = 1;
+
+  for (let i = 0; i < words.length; i += wordsPerSegment) {
+    const segmentWords = words.slice(i, i + wordsPerSegment);
+    const start = (i / wordsPerSegment) * segmentDuration;
+    const end = Math.min(start + segmentDuration, totalDuration);
+
+    lines.push(String(segmentIndex++));
+    lines.push(`${formatSrtTimestamp(start)} --> ${formatSrtTimestamp(end)}`);
+    lines.push(segmentWords.join(' '));
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VTT EXPORT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function exportToVtt(data: ExportData, options: ExportOptions): string {
+  const segments = data.segments || [];
+  const lines: string[] = ['WEBVTT', ''];
+
+  // Add metadata
+  lines.push(`NOTE`);
+  lines.push(`Title: ${data.video.title || 'Untitled'}`);
+  lines.push(`Source: ${data.video.youtube_url}`);
+  lines.push('');
+
+  // Add chapters as VTT chapters
+  if (options.includeChapters && data.insights?.chapters?.length) {
+    data.insights.chapters.forEach((chapter) => {
+      lines.push(`NOTE Chapter: ${chapter.title}`);
+    });
+    lines.push('');
+  }
+
+  if (segments.length === 0) {
+    // Create from plain text
+    const srt = createSrtFromPlainText(data.transcript.transcript_text, data.video.duration_seconds);
+    // Convert SRT timestamps to VTT
+    const vttBody = srt
+      .replace(/^\d+$/gm, '')
+      .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
+      .split('\n')
+      .filter((line) => line.trim())
+      .join('\n\n');
+    lines.push(vttBody);
+  } else {
+    segments.forEach((segment, index) => {
+      if (index > 0) lines.push('');
+      lines.push(`${formatVttTimestamp(segment.start)} --> ${formatVttTimestamp(segment.end)}`);
+
+      let text = segment.text;
+      if (options.includeSpeakers && segment.speaker) {
+        text = `<v ${segment.speaker}>${text}`;
+      }
+      lines.push(text);
+    });
+  }
+
+  return lines.join('\n');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// JSON EXPORT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function exportToJson(data: ExportData, options: ExportOptions): string {
+  const output: Record<string, unknown> = {
+    metadata: {
+      title: data.video.title,
+      source: data.video.youtube_url,
+      videoId: data.video.youtube_video_id,
+      duration: data.video.duration_seconds,
+      generatedAt: new Date().toISOString(),
+      wordCount: data.transcript.word_count,
+      language: data.transcript.language_code,
+      extractionMethod: data.transcript.extraction_method,
+      confidence: data.transcript.confidence_score,
+    },
+    transcript: {
+      text: data.transcript.transcript_text,
+      segments: options.includeTimestamps ? data.segments : undefined,
+    },
   };
+
+  if (options.includeSummary && data.insights) {
+    output.insights = {
+      model: data.insights.model,
+      summary: data.insights.summary,
+      keyTakeaways: data.insights.key_takeaways,
+      seoMetadata: data.insights.seo_metadata,
+    };
+  }
+
+  if (options.includeChapters && data.insights?.chapters?.length) {
+    output.chapters = data.insights.chapters;
+  }
 
   return JSON.stringify(output, null, 2);
 }
 
-// ---------------------------------------------------------------------------
-// Private utilities
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════════
+// MARKDOWN EXPORT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function exportToMarkdown(data: ExportData, options: ExportOptions): string {
+  const { video, transcript, insights } = data;
+  const lines: string[] = [];
+
+  // Title
+  lines.push(`# ${video.title || 'Transcript'}`);
+  lines.push('');
+
+  // Metadata
+  lines.push('## Video Information');
+  lines.push('');
+  lines.push(`- **Source:** [${video.youtube_url}](${video.youtube_url})`);
+  if (video.duration_seconds) {
+    lines.push(`- **Duration:** ${formatDuration(video.duration_seconds)}`);
+  }
+  lines.push(`- **Generated:** ${new Date().toLocaleDateString()}`);
+  lines.push('');
+
+  // Summary
+  if (options.includeSummary && insights?.summary) {
+    lines.push('## Summary');
+    lines.push('');
+    lines.push(insights.summary);
+    lines.push('');
+  }
+
+  // Key Takeaways
+  if (options.includeSummary && insights?.key_takeaways?.length) {
+    lines.push('## Key Takeaways');
+    lines.push('');
+    insights.key_takeaways.forEach((takeaway) => {
+      lines.push(`- ${takeaway}`);
+    });
+    lines.push('');
+  }
+
+  // Chapters
+  if (options.includeChapters && insights?.chapters?.length) {
+    lines.push('## Chapters');
+    lines.push('');
+    lines.push('| Time | Chapter | Description |');
+    lines.push('|------|---------|-------------|');
+    insights.chapters.forEach((chapter) => {
+      const desc = chapter.description?.replace(/\|/g, '\\|') || '';
+      lines.push(`| ${chapter.timestamp} | ${chapter.title} | ${desc} |`);
+    });
+    lines.push('');
+  }
+
+  // Transcript
+  lines.push('## Full Transcript');
+  lines.push('');
+
+  if (options.includeTimestamps && data.segments?.length) {
+    data.segments.forEach((segment) => {
+      const timestamp = formatTimestamp(segment.start);
+      const speaker = options.includeSpeakers && segment.speaker
+        ? `**${segment.speaker}:** `
+        : '';
+      lines.push(`**[${timestamp}]** ${speaker}${segment.text}`);
+      lines.push('');
+    });
+  } else {
+    // Split into paragraphs for readability
+    const paragraphs = transcript.transcript_text
+      .split(/(?<=[.!?])\s+/)
+      .reduce((acc: string[], sentence, i) => {
+        const paragraphIndex = Math.floor(i / 5);
+        if (!acc[paragraphIndex]) acc[paragraphIndex] = '';
+        acc[paragraphIndex] += (acc[paragraphIndex] ? ' ' : '') + sentence;
+        return acc;
+      }, []);
+
+    paragraphs.forEach((p) => {
+      lines.push(p);
+      lines.push('');
+    });
+  }
+
+  // Footer
+  lines.push('---');
+  lines.push('*Generated by TranscriberPro*');
+
+  return lines.join('\n');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN EXPORT FUNCTION
+// ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Splits a flat word array into chunks of at most `size` words.
- * The last chunk may contain fewer than `size` words if the total is not divisible by `size`.
+ * Exports transcript to specified format
  */
-function chunkWords(words: DeepgramWord[], size: number): DeepgramWord[][] {
-  const chunks: DeepgramWord[][] = [];
-  for (let i = 0; i < words.length; i += size) {
-    chunks.push(words.slice(i, i + size));
+export function exportTranscript(
+  data: ExportData,
+  options: ExportOptions,
+): ExportResult {
+  const { format } = options;
+  const filename = generateFilename(data.video, format);
+
+  let content: string;
+
+  switch (format) {
+    case 'txt':
+      content = exportToTxt(data, options);
+      break;
+    case 'srt':
+      content = exportToSrt(data, options);
+      break;
+    case 'vtt':
+      content = exportToVtt(data, options);
+      break;
+    case 'json':
+      content = exportToJson(data, options);
+      break;
+    case 'md':
+      content = exportToMarkdown(data, options);
+      break;
+    case 'docx':
+      // DOCX requires binary generation - return markdown for now
+      content = exportToMarkdown(data, options);
+      break;
+    default:
+      content = exportToTxt(data, options);
   }
-  return chunks;
+
+  return {
+    content,
+    filename,
+    mimeType: MIME_TYPES[format] || 'text/plain',
+  };
 }
+
+/**
+ * Generates filename for export
+ */
+function generateFilename(video: Video, format: ExportFormat): string {
+  const title = (video.title || video.youtube_video_id || 'transcript')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .substring(0, 50);
+
+  return `${title}.${format}`;
+}
+
+/**
+ * Downloads export file in browser
+ */
+export function downloadExport(result: ExportResult): void {
+  const blob = new Blob([result.content], { type: result.mimeType });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = result.filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Copies export content to clipboard
+ */
+export async function copyExportToClipboard(result: ExportResult): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(result.content);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONVENIENCE EXPORTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const ExportBuilder = {
+  exportTranscript,
+  downloadExport,
+  copyExportToClipboard,
+  formats: ['txt', 'srt', 'vtt', 'json', 'md'] as ExportFormat[],
+  mimeTypes: MIME_TYPES,
+};
+
+export default ExportBuilder;
