@@ -10,7 +10,7 @@ node_modules/
 .deno/
 vendor/
 deno.lock
-
+repomix-output.md
 # --- 2. EXPO & NATIVE ---
 .expo/
 dist/
