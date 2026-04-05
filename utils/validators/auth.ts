@@ -8,6 +8,7 @@ export interface ValidationResult {
   error?: string;
 }
 
+
 /**
  * RFC 5322 compliant email regex
  */

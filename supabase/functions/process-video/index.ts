@@ -14,7 +14,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { createAdminClient } from '../_shared/supabaseAdmin.ts';
 import { getCaptions } from './captions.ts';
-import { getAudioUrl } from './audio.ts';
+import { getAudioBuffer } from './audio.ts';
 import { transcribeAudio } from './deepgram.ts';
 import { generateInsights } from './insights.ts';
 import {
@@ -133,7 +133,7 @@ serve(async (req: Request) => {
       await broadcastStatus('transcribing');
 
       try {
-        const audioStreamUrl = await getAudioUrl(video_url, platform);
+        const audioStreamUrl = await getAudioBuffer(video_url, platform);
         if (!audioStreamUrl) {
           throw new Error('SOURCE_STREAM_INACCESSIBLE: No valid audio stream returned from proxy rotation.');
         }
@@ -152,8 +152,8 @@ serve(async (req: Request) => {
 
         // TERTIARY RECOVERY: Pass the URL to the AI context so the job never totally fails.
         // Guarantees finalTranscript is NEVER empty.
-        finalTranscript = `[RECOVERY_MODE] Primary extraction failed. Please generate metadata, SEO tags, and a summary based entirely on the context of this source URL: ${video_url}`;
-        extractionMethodLabel = 'contextual_emergency_fallback';
+        finalTranscript = `Primary extraction failed. Please generate metadata, SEO tags, and a summary based entirely on the context of this source URL: ${video_url}`;
+        extractionMethodLabel = '';
         rawMetadata = { error: msg, fallback: true, source: video_url };
 
         await broadcastStatus('transcribing', { error: `Layer 2 Exception: ${msg}` });

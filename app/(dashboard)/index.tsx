@@ -1,3 +1,13 @@
+/**
+ * app/(dashboard)/index.tsx
+ * Sovereign Engine Dashboard
+ * ----------------------------------------------------------------------------
+ * FEATURES:
+ * 1. NATIVE SVG: Bypasses Metro bundler crashes using react-native-svg.
+ * 2. TANSTACK MUTATION: Securely dispatches payloads via useProcessVideo hook.
+ * 3. REALTIME DB SYNC: Listens to the `videos` table for live pipeline updates.
+ */
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
@@ -10,17 +20,22 @@ import {
   LayoutAnimation,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+// State & API
 import { useVideoStore } from '../../store/useVideoStore';
+import { useProcessVideo } from '../../hooks/mutations/useProcessVideo';
 import { useVideoData } from '../../hooks/queries/useVideoData';
+
+// UI Components
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { FadeIn } from '../../components/animations/FadeIn';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { ProcessingLoader } from '../../components/ui/ProcessingLoader';
 import { cn } from '../../lib/utils';
 
-// FIXED: Replaced HTML <svg> with native react-native-svg components
+// Native SVG & Animation
 import Svg, { Rect, Path, Polygon } from 'react-native-svg';
 import Animated, {
   useSharedValue,
@@ -33,7 +48,7 @@ import Animated, {
   withSequence,
 } from 'react-native-reanimated';
 
-// 1. The small badge icon (Native SVG)
+// ─── SMALL BADGE ICON ────────────────────────────────────────────────────────
 const SmallBadgeIcon = ({ width = 20, height = 20, color = '#60A5FA' }) => (
   <Svg
     width={width}
@@ -49,7 +64,7 @@ const SmallBadgeIcon = ({ width = 20, height = 20, color = '#60A5FA' }) => (
   </Svg>
 );
 
-// 2. The Hero Animated SVG (Document, YouTube, Spinning Arrows)
+// ─── ANIMATED HERO SVG ───────────────────────────────────────────────────────
 const AnimatedConverter = () => {
   const rotation = useSharedValue(0);
   const floatY = useSharedValue(0);
@@ -85,7 +100,6 @@ const AnimatedConverter = () => {
         { width: 140, height: 140, alignSelf: 'center', marginVertical: 10 },
       ]}
     >
-      {/* SPINNING YELLOW ARROWS */}
       <Animated.View
         style={[
           { position: 'absolute', top: 10, left: 10, width: 120, height: 120 },
@@ -111,8 +125,6 @@ const AnimatedConverter = () => {
           <Polygon points="10,50 30,50 20,30" fill="#F59E0B" />
         </Svg>
       </Animated.View>
-
-      {/* BLUE DOCUMENT */}
       <View style={{ position: 'absolute', top: 0, left: 0 }}>
         <Svg width="55" height="65" viewBox="0 0 45 55">
           <Rect x="0" y="0" width="45" height="55" rx="6" fill="#1E3A8A" />
@@ -120,8 +132,6 @@ const AnimatedConverter = () => {
           <Polygon points="25,5 40,5 40,20" fill="#FBBF24" />
         </Svg>
       </View>
-
-      {/* PINK YOUTUBE */}
       <View style={{ position: 'absolute', bottom: 0, right: -5 }}>
         <Svg width="65" height="50" viewBox="0 0 55 40">
           <Rect x="0" y="0" width="55" height="40" rx="10" fill="#BE185D" />
@@ -133,21 +143,7 @@ const AnimatedConverter = () => {
   );
 };
 
-interface PipelineStatus {
-  text: string;
-  progress: string;
-  color: string;
-  description: string;
-  glow: string;
-}
-
-interface SystemLog {
-  id: string;
-  timestamp: string;
-  message: string;
-  level: 'info' | 'warn' | 'error' | 'success';
-}
-
+// ─── AMBIENT BACKGROUND ──────────────────────────────────────────────────────
 const AmbientGradient = ({ delay = 0, color = '#3B82F6' }) => {
   const pulse = useSharedValue(0);
   const { width, height } = Dimensions.get('window');
@@ -184,8 +180,27 @@ const AmbientGradient = ({ delay = 0, color = '#3B82F6' }) => {
   );
 };
 
+interface PipelineStatus {
+  text: string;
+  progress: string;
+  color: string;
+  description: string;
+  glow: string;
+}
+
+interface SystemLog {
+  id: string;
+  timestamp: string;
+  message: string;
+  level: 'info' | 'warn' | 'error' | 'success';
+}
+
 export default function DashboardScreen() {
   const router = useRouter();
+  const { width: screenWidth } = Dimensions.get('window');
+  const isMobile = screenWidth < 768;
+
+  // Local UI State
   const [videoUrl, setVideoUrl] = useState('');
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [isUrlValid, setIsUrlValid] = useState(true);
@@ -193,32 +208,19 @@ export default function DashboardScreen() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const OUTPUT_LANGUAGES = [
-    'English',
-    'Spanish',
-    'French',
-    'German',
-    'Italian',
-    'Portuguese',
-    'Dutch',
-    'Swedish',
-    'Russian',
-    'Japanese',
-    'Korean',
-    'Chinese',
+    'English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese',
+    'Dutch', 'Swedish', 'Russian', 'Japanese', 'Korean', 'Chinese',
   ];
 
-  const { width: screenWidth } = Dimensions.get('window');
-  const isMobile = screenWidth < 768;
-
-  const {
-    activeVideoId: currentVideoId,
-    isProcessing,
-    processNewVideo,
-    error: storeError,
-    clearState: clearError,
-  } = useVideoStore();
-
+  // ─── UPGRADED STATE & MUTATIONS ───
+  // We use store ONLY for the active ID to track progress
+  const { activeVideoId: currentVideoId, clearState: clearError } = useVideoStore();
+  
+  // Real-time data for the progress bar
   const { data: videoData } = useVideoData(currentVideoId);
+  
+  // The actual Engine Trigger
+  const { mutateAsync: processVideo, isPending, error: mutationError } = useProcessVideo();
 
   const addLog = useCallback(
     (message: string, level: SystemLog['level'] = 'info') => {
@@ -240,16 +242,19 @@ export default function DashboardScreen() {
     },
     [],
   );
-
+  // ─── PIPELINE STATUS MONITORING 
+  
+  
   useEffect(() => {
     if (videoData?.status) {
-      const statusFormats: Record<string, string> = {
-        queued: 'Media queued for processing.',
-        downloading: 'Fetching media assets from source.',
-        transcribing: 'Transcribing audio track.',
-        ai_processing: 'Generating AI summaries and insights.',
-        completed: 'Processing complete. Results ready.',
-        failed: 'Processing pipeline encountered a critical error.',
+        const statusFormats: Record<string, string> = {
+          queued: 'Media queued for processing.',
+          downloading: 'Fetching media assets from source.',
+          transcribing: 'Transcribing audio track.',
+          ai_processing: 'Generating AI summaries and insights.',
+          completed: 'Processing complete. Results ready.',
+         failed: 'Processing pipeline encountered a critical error.',
+        
       };
 
       const level =
@@ -287,9 +292,10 @@ export default function DashboardScreen() {
     addLog('Validating source and initiating pipeline...', 'info');
 
     try {
-      await processNewVideo(videoUrl, {
+      // Dispatching via TanStack Mutation
+      await processVideo({
+        videoUrl: videoUrl,
         language: selectedLanguage,
-        difficulty: 'standard',
       });
       addLog('Pipeline successfully initiated.', 'success');
     } catch (err: any) {
@@ -298,7 +304,7 @@ export default function DashboardScreen() {
   };
 
   const statusInfo = useMemo((): PipelineStatus | null => {
-    if (!videoData && isProcessing) {
+    if (!videoData && isPending) {
       return {
         text: 'INITIALIZING',
         progress: 'w-1/12',
@@ -314,7 +320,7 @@ export default function DashboardScreen() {
       queued: {
         text: 'QUEUED',
         progress: 'w-1/5',
-        color: 'bg-blue-500',
+        color: 'bg-cyan-500',
         description: 'Waiting for available processing resources.',
         glow: 'shadow-[0_0_15px_rgba(59,130,246,0.4)]',
       },
@@ -358,14 +364,16 @@ export default function DashboardScreen() {
     };
 
     return maps[videoData.status] || null;
-  }, [videoData, isProcessing]);
+  }, [videoData, isPending]);
 
   const effectivelyLoading = Boolean(
-    isProcessing ||
+    isPending ||
     (videoData &&
       videoData.status !== 'completed' &&
       videoData.status !== 'failed'),
   );
+
+  const displayError = (mutationError as Error)?.message || videoData?.error_message;
 
   return (
     <SafeAreaView className="flex-1 bg-[#05050A]">
@@ -391,11 +399,9 @@ export default function DashboardScreen() {
           }}
           showsVerticalScrollIndicator={false}
         >
-          {/* Wrap main content to optionally center when not scrolling */}
           <View className="justify-center w-full min-h-full">
             <FadeIn>
               <View className="items-center mb-10 md:mb-16">
-                {/* Transcriber Pro Badge */}
                 <View className="flex-row items-center gap-3 px-4 py-2 mb-4 border rounded-full bg-gradient-to-r from-blue-500/30 to-purple-500/30 border-white/10">
                   <SmallBadgeIcon width={20} height={20} color="#60A5FA" />
                   <Text className="text-sm font-bold tracking-wide text-blue-400">
@@ -403,9 +409,8 @@ export default function DashboardScreen() {
                   </Text>
                 </View>
 
-                {/* SVG ANIMATION SECTION */}
                 <View className="items-center justify-center mb-8">
-                  {isProcessing ? (
+                  {effectivelyLoading ? (
                     <ProcessingLoader
                       size={isMobile ? 80 : 120}
                       color="#60A5FA"
@@ -417,14 +422,6 @@ export default function DashboardScreen() {
                   )}
                 </View>
 
-                <Text
-                  className={cn(
-                    'font-black text-white tracking-tight uppercase text-center',
-                    isMobile
-                      ? 'text-4xl leading-[42px]'
-                      : 'text-6xl leading-[64px]',
-                  )}
-                ></Text>
                 <View className="h-[2px] w-16 md:w-24 bg-blue-500 mt-6 md:mt-8 rounded-full shadow-[0_0_20px_rgba(59,130,246,0.5)]" />
               </View>
             </FadeIn>
@@ -445,15 +442,14 @@ export default function DashboardScreen() {
                     onChangeText={(v) => {
                       setVideoUrl(v);
                       if (!isUrlValid) setIsUrlValid(true);
-                      if (storeError) clearError();
+                      if (displayError) clearError();
                     }}
                     autoCapitalize="none"
                     autoCorrect={false}
                     editable={!effectivelyLoading}
                   />
-                  {/* OUTPUT LANGUAGE SELECTOR */}
                   <View className="z-50 mt-8">
-                    <Text className="text-white/40 text-[10px] font-semibold uppercase tracking-[2px] mb-3">
+                    <Text className="text-white/80 text-[10px] font-semibold uppercase tracking-[2px] mb-3">
                       Target Language
                     </Text>
 
@@ -478,7 +474,7 @@ export default function DashboardScreen() {
                             >
                               <Text
                                 className={`text-xs font-semibold tracking-wide ${
-                                  active ? 'text-blue-400' : 'text-white/50'
+                                  active ? 'text-blue-400' : 'text-white/80'
                                 }`}
                               >
                                 {lang}
@@ -504,13 +500,13 @@ export default function DashboardScreen() {
                           <Text className="text-sm font-semibold tracking-wide text-white/80">
                             {selectedLanguage}
                           </Text>
-                          <Text className="text-xs text-white/50">
+                          <Text className="text-xs text-white/80">
                             {isDropdownOpen ? '▲' : '▼'}
                           </Text>
                         </TouchableOpacity>
 
                         {isDropdownOpen && (
-                          <View className="mt-2 overflow-hidden border shadow-2xl rounded-xl border-white/10 bg-black/60 backdrop-blur-xl">
+                          <View className="absolute w-full mt-2 overflow-hidden border shadow-2xl rounded-xl border-white/30 bg-black/30 backdrop-blur-xl top-full">
                             <ScrollView
                               style={{ maxHeight: 200 }}
                               nestedScrollEnabled
@@ -557,7 +553,7 @@ export default function DashboardScreen() {
                   <Button
                     title={
                       effectivelyLoading
-                        ? 'PROCESSING REQUEST...'
+                        ? 'TRANSMITTING REQUEST...'
                         : 'START TRANSCRIBER'
                     }
                     onPress={handleProcessVideo}
@@ -566,13 +562,13 @@ export default function DashboardScreen() {
                     className="py-5 mt-8 bg-blue-600 shadow-xl md:py-6 hover:bg-blue-500 rounded-xl"
                   />
 
-                  {storeError && (
+                  {displayError && (
                     <View className="p-5 mt-6 border bg-rose-500/10 border-rose-500/20 rounded-2xl">
                       <Text className="mb-2 text-xs font-bold tracking-widest uppercase text-rose-400">
                         Error Encountered
                       </Text>
                       <Text className="text-sm leading-5 text-rose-300/80">
-                        {storeError}
+                        {displayError}
                       </Text>
                     </View>
                   )}
@@ -581,10 +577,10 @@ export default function DashboardScreen() {
                     effectivelyLoading ||
                     videoData?.status === 'completed') &&
                     statusInfo && (
-                      <View className="pt-8 mt-10 border-t border-white/10">
+                      <View className="pt-8 mt-10 border-t border-white/60">
                         <View className="flex-row justify-between mb-4">
                           <View>
-                            <Text className="text-white/40 text-[10px] font-semibold uppercase tracking-[2px] mb-1">
+                            <Text className="text-white/80 text-[10px] font-semibold uppercase tracking-[2px] mb-1">
                               Current Stage
                             </Text>
                             <Text
@@ -599,7 +595,7 @@ export default function DashboardScreen() {
                             </Text>
                           </View>
                           <View className="items-end">
-                            <Text className="text-white/40 text-[10px] font-semibold uppercase tracking-[2px] mb-1">
+                            <Text className="text-white/80 text-[10px] font-semibold uppercase tracking-[2px] mb-1">
                               Job ID
                             </Text>
                             <Text className="font-mono text-xs uppercase text-white/60">
@@ -624,7 +620,7 @@ export default function DashboardScreen() {
                             'text-xs font-medium',
                             videoData?.status === 'failed'
                               ? 'text-rose-400/80'
-                              : 'text-white/50',
+                              : 'text-white/80',
                           )}
                         >
                           {statusInfo.description}
@@ -652,7 +648,7 @@ export default function DashboardScreen() {
                   <Text className="text-white/80 text-[10px] font-semibold uppercase tracking-[2px] mb-3 ml-2">
                     System Logs
                   </Text>
-                  <View className="relative p-5 overflow-hidden border bg-[#1d1d49]/40 border-black/5 rounded-2xl min-h-[120px]">
+                  <View className="relative p-5 overflow-hidden border bg-[#1d1d49]/60 border-black/5 rounded-2xl min-h-[120px]">
                     {logs.length === 0 ? (
                       <Text className="mt-6 font-mono text-xs text-center text-white/80">
                         Awaiting input...
@@ -660,7 +656,7 @@ export default function DashboardScreen() {
                     ) : (
                       logs.map((log) => (
                         <View key={log.id} className="flex-row mb-2.5">
-                          <Text className="text-white/60 font-mono text-[10px] w-20 pt-0.5">
+                          <Text className="text-white/80 font-mono text-[10px] w-20 pt-0.5">
                             {log.timestamp}
                           </Text>
                           <Text
@@ -685,7 +681,7 @@ export default function DashboardScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
       <View className="absolute items-center justify-center w-full bottom-4">
-        <Text className="text-[10px] text-white/30 font-mono">
+        <Text className="text-[10px] text-white/80 font-mono">
           &copy; {new Date().getFullYear()} Transcriber Pro. All rights
           reserved.
         </Text>

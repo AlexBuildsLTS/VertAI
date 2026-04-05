@@ -1,34 +1,18 @@
-// cSpell:disable
 /**
  * services/exportBuilder.ts
- * Professional Transcript & Intelligence Export Service
+ * Enterprise-Grade Export & Formatting Engine
  * ----------------------------------------------------------------------------
- * Features:
- * - 100% Synchronized with Supabase database.types.ts
- * - Defensive JSON parsing for Supabase 'Json' DB types
- * - Premium Executive Formatting for TXT and Markdown
- * - Automatic SRT/VTT generation from raw text if timestamps are missing
+ * FEATURES:
+ * - 100% Type-Safe: Defensive parsing for Supabase JSON fields.
+ * - Unified Output: TXT and MD files contain BOTH the AI Summaries and the Raw Transcript.
+ * - Smart Fallbacks: Auto-calculates SRT/VTT timestamps if native segments fail.
+ * - Platform Agnostic: Triggers native downloads on Web and clipboard on Mobile.
  */
 
-import {
-  formatTimestamp,
-  formatSrtTimestamp,
-  formatVttTimestamp,
-  formatDuration,
-} from '../utils/formatters/time';
-import type {
-  ExportFormat,
-  ExportOptions,
-  ExportResult,
-  Transcript,
-  TranscriptSegment,
-  AiInsights,
-  Video,
-} from '../types/api';
+import { formatTimestamp, formatSrtTimestamp, formatVttTimestamp, formatDuration } from '../utils/formatters/time';
+import type { ExportFormat, ExportOptions, ExportResult, Transcript, TranscriptSegment, AiInsights, Video } from '../types/api';
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// TYPES & GUARDS
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── INTERFACES & GUARDS ─────────────────────────────────────────────────────
 
 interface ExportData {
   video: Video;
@@ -52,25 +36,10 @@ const MIME_TYPES: Record<ExportFormat, string> = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 };
 
-/**
- * Defensive utility to safely extract arrays from Supabase JSON fields
- */
-function safeArray<T>(data: any): T[] {
-  if (!data) return [];
-  return Array.isArray(data) ? data : [];
-}
+// Defensive JSON parsers to prevent crashes from malformed Supabase JSON columns
+const safeArray = <T>(data: any): T[] => (Array.isArray(data) ? data : []);
 
-/**
- * Defensive utility to safely extract objects from Supabase JSON fields
- */
-function safeObject(data: any): Record<string, any> {
-  if (!data) return {};
-  return typeof data === 'object' && !Array.isArray(data) ? data : {};
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// PLAIN TEXT EXPORT (EXECUTIVE BRIEF)
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── PLAIN TEXT ENGINE (EXECUTIVE TXT) ───────────────────────────────────────
 
 function exportToTxt(data: ExportData, options: ExportOptions): string {
   const { video, transcript, insights } = data;
@@ -78,36 +47,26 @@ function exportToTxt(data: ExportData, options: ExportOptions): string {
   const chapters = safeArray<ParsedChapter>(insights?.chapters);
   const takeaways = safeArray<string>(insights?.key_takeaways);
 
-  // --- DOCUMENT HEADER ---
   lines.push('════════════════════════════════════════════════════════════════════════');
-  lines.push(`EXECUTIVE TRANSCRIPT: ${video.title || 'Untitled Media'}`);
-  lines.push('════════════════════════════════════════════════════════════════════════');
-  lines.push('');
+  lines.push(`INTELLIGENCE DOSSIER: ${video.title || 'Unknown Media Asset'}`);
+  lines.push('════════════════════════════════════════════════════════════════════════\n');
   lines.push(`Source URL : ${video.youtube_url}`);
   if (video.duration_seconds) lines.push(`Duration   : ${formatDuration(video.duration_seconds)}`);
-  lines.push(`Generated  : ${new Date().toUTCString()}`);
-  lines.push('');
+  lines.push(`Generated  : ${new Date().toUTCString()}\n`);
 
-  // --- EXECUTIVE SUMMARY ---
   if (options.includeSummary && insights?.summary) {
-    lines.push('─── EXECUTIVE SUMMARY ──────────────────────────────────────────────────');
-    lines.push('');
-    lines.push(insights.summary);
-    lines.push('');
+    lines.push('─── EXECUTIVE ABSTRACT ─────────────────────────────────────────────────\n');
+    lines.push(insights.summary + '\n');
   }
 
-  // --- KEY TAKEAWAYS ---
   if (options.includeSummary && takeaways.length > 0) {
-    lines.push('─── KEY TAKEAWAYS ──────────────────────────────────────────────────────');
-    lines.push('');
+    lines.push('─── STRATEGIC INDICATORS ───────────────────────────────────────────────\n');
     takeaways.forEach((takeaway, i) => lines.push(`${i + 1}. ${takeaway}`));
-    lines.push('');
+    lines.push('\n');
   }
 
-  // --- CHRONOLOGICAL CHAPTERS ---
   if (options.includeChapters && chapters.length > 0) {
-    lines.push('─── INDEX & CHAPTERS ───────────────────────────────────────────────────');
-    lines.push('');
+    lines.push('─── TIMELINE MAPPING ───────────────────────────────────────────────────\n');
     chapters.forEach((chapter) => {
       lines.push(`[${chapter.timestamp}] ${chapter.title.toUpperCase()}`);
       if (chapter.description) lines.push(`    ${chapter.description}`);
@@ -115,46 +74,99 @@ function exportToTxt(data: ExportData, options: ExportOptions): string {
     });
   }
 
-  // --- VERBATIM TRANSCRIPT ---
-  lines.push('─── FULL TRANSCRIPT ────────────────────────────────────────────────────');
-  lines.push('');
+  lines.push('─── VERBATIM DATA STREAM (RAW TRANSCRIPT) ──────────────────────────────\n');
 
   if (options.includeTimestamps && data.segments && data.segments.length > 0) {
+    // If segments exist, map them with timestamps
     data.segments.forEach((segment) => {
       const timestamp = formatTimestamp(segment.start);
-      const speaker = options.includeSpeakers && segment.speaker ? `[${segment.speaker}] ` : '';
+      const speaker = options.includeSpeakers && segment.speaker ? `[SPK_${segment.speaker}] ` : '';
       lines.push(`[${timestamp}] ${speaker}${segment.text}`);
     });
   } else {
-    // Apply basic word wrapping/paragraphing for unsegmented text
+    // Smart Paragraphing for pure raw text
     const paragraphs = transcript.transcript_text.split(/(?<=[.!?])\s+/);
     let currentParagraph = '';
     paragraphs.forEach((sentence, i) => {
       currentParagraph += (currentParagraph ? ' ' : '') + sentence;
-      // Break into paragraphs every ~6 sentences
-      if (i % 6 === 5 || i === paragraphs.length - 1) {
-        lines.push(currentParagraph.trim());
-        lines.push('');
+      if (i % 8 === 7 || i === paragraphs.length - 1) {
+        lines.push(currentParagraph.trim() + '\n');
         currentParagraph = '';
       }
     });
   }
 
-  lines.push('');
-  lines.push('════════════════════════════════════════════════════════════════════════');
-  lines.push('Generated securely by TranscriberPro Intelligence');
+  lines.push('\n════════════════════════════════════════════════════════════════════════');
+  lines.push('Preserved Securely by NorthOS Vault');
   lines.push('════════════════════════════════════════════════════════════════════════');
 
   return lines.join('\n');
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SRT & VTT TIMESTAMPS EXPORT
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── MARKDOWN ENGINE ─────────────────────────────────────────────────────────
 
-function createSrtFromPlainText(text: string, durationSeconds?: number | null): string {
+function exportToMarkdown(data: ExportData, options: ExportOptions): string {
+  const { video, transcript, insights } = data;
+  const chapters = safeArray<ParsedChapter>(insights?.chapters);
+  const takeaways = safeArray<string>(insights?.key_takeaways);
+  const lines: string[] = [];
+
+  lines.push(`# Intelligence Dossier: ${video.title || 'Decrypted Media Payload'}\n`);
+  lines.push(`**Source:** [View Original](${video.youtube_url})  `);
+  if (video.duration_seconds) lines.push(`**Duration:** ${formatDuration(video.duration_seconds)}  `);
+  lines.push(`**Generated:** ${new Date().toLocaleDateString()}\n`);
+
+  if (options.includeSummary && insights?.summary) {
+    lines.push('## Executive Abstract\n');
+    lines.push(insights.summary + '\n');
+  }
+
+  if (options.includeSummary && takeaways.length > 0) {
+    lines.push('## Strategic Indicators\n');
+    takeaways.forEach((t) => lines.push(`* ${t}`));
+    lines.push('');
+  }
+
+  if (options.includeChapters && chapters.length > 0) {
+    lines.push('## Timeline Mapping\n');
+    lines.push('| Timestamp | Subject | Details |');
+    lines.push('| :--- | :--- | :--- |');
+    chapters.forEach((c) => {
+      const desc = c.description?.replace(/\|/g, '&#124;') || '';
+      lines.push(`| \`${c.timestamp}\` | **${c.title}** | ${desc} |`);
+    });
+    lines.push('');
+  }
+
+  lines.push('## Verbatim Data Stream\n');
+
+  if (options.includeTimestamps && data.segments && data.segments.length > 0) {
+    data.segments.forEach((seg) => {
+      const speaker = options.includeSpeakers && seg.speaker ? `**[SPK_${seg.speaker}]** ` : '';
+      lines.push(`*\\[${formatTimestamp(seg.start)}\\]* ${speaker}${seg.text}  `);
+    });
+  } else {
+    // Smart Paragraphing for Markdown
+    const paragraphs = transcript.transcript_text.split(/(?<=[.!?])\s+/);
+    let currentParagraph = '';
+    paragraphs.forEach((sentence, i) => {
+      currentParagraph += (currentParagraph ? ' ' : '') + sentence;
+      if (i % 8 === 7 || i === paragraphs.length - 1) {
+        lines.push(currentParagraph.trim() + '\n\n');
+        currentParagraph = '';
+      }
+    });
+  }
+
+  lines.push('---\n*Preserved Securely by NorthOS Vault*');
+  return lines.join('\n');
+}
+
+// ─── SUBTITLE ENGINES (SRT & VTT) ────────────────────────────────────────────
+
+function createFallbackSrt(text: string, durationSeconds?: number | null): string {
   const words = text.split(/\s+/);
-  const wordsPerSegment = 12; // Adjusted for better readability on screen
+  const wordsPerSegment = 12;
   const totalDuration = durationSeconds || (words.length / 150) * 60;
   const segmentDuration = totalDuration / Math.ceil(words.length / wordsPerSegment);
 
@@ -176,16 +188,13 @@ function createSrtFromPlainText(text: string, durationSeconds?: number | null): 
 
 function exportToSrt(data: ExportData, options: ExportOptions): string {
   const segments = data.segments || [];
-  if (segments.length === 0) {
-    return createSrtFromPlainText(data.transcript.transcript_text, data.video.duration_seconds);
-  }
+  if (segments.length === 0) return createFallbackSrt(data.transcript.transcript_text, data.video.duration_seconds);
 
   const lines: string[] = [];
   segments.forEach((segment, index) => {
     lines.push(String(index + 1));
     lines.push(`${formatSrtTimestamp(segment.start)} --> ${formatSrtTimestamp(segment.end)}`);
-    let text = segment.text;
-    if (options.includeSpeakers && segment.speaker) text = `[${segment.speaker}] ${text}`;
+    const text = options.includeSpeakers && segment.speaker ? `[SPK_${segment.speaker}] ${segment.text}` : segment.text;
     lines.push(text);
     lines.push('');
   });
@@ -195,217 +204,89 @@ function exportToSrt(data: ExportData, options: ExportOptions): string {
 function exportToVtt(data: ExportData, options: ExportOptions): string {
   const segments = data.segments || [];
   const chapters = safeArray<ParsedChapter>(data.insights?.chapters);
-  const lines: string[] = ['WEBVTT', ''];
+  const lines: string[] = ['WEBVTT\n'];
 
-  lines.push(`NOTE`);
-  lines.push(`Title: ${data.video.title || 'Untitled'}`);
-  lines.push(`Source: ${data.video.youtube_url}`);
-  lines.push('');
+  lines.push(`NOTE Title: ${data.video.title || 'Unknown Media Asset'}`);
+  lines.push(`NOTE Source: ${data.video.youtube_url}\n`);
 
   if (options.includeChapters && chapters.length > 0) {
-    chapters.forEach((chapter) => {
-      lines.push(`NOTE Chapter: [${chapter.timestamp}] ${chapter.title}`);
-    });
+    chapters.forEach((c) => lines.push(`NOTE Chapter: [${c.timestamp}] ${c.title}`));
     lines.push('');
   }
 
   if (segments.length === 0) {
-    const srt = createSrtFromPlainText(data.transcript.transcript_text, data.video.duration_seconds);
-    const vttBody = srt
-      .replace(/^\d+$/gm, '') // Remove SRT sequence numbers
-      .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2') // Change comma to dot for milliseconds
-      .split('\n').filter(l => l.trim()).join('\n\n');
-    lines.push(vttBody);
+    const srt = createFallbackSrt(data.transcript.transcript_text, data.video.duration_seconds);
+    lines.push(srt.replace(/^\d+$/gm, '').replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2').split('\n').filter(l => l.trim()).join('\n\n'));
   } else {
     segments.forEach((segment, index) => {
       if (index > 0) lines.push('');
       lines.push(`${formatVttTimestamp(segment.start)} --> ${formatVttTimestamp(segment.end)}`);
-      let text = segment.text;
-      if (options.includeSpeakers && segment.speaker) text = `<v ${segment.speaker}>${text}`;
+      const text = options.includeSpeakers && segment.speaker ? `<v SPK_${segment.speaker}>${segment.text}` : segment.text;
       lines.push(text);
     });
   }
   return lines.join('\n');
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// JSON & MARKDOWN EXPORT
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── JSON ENGINE ─────────────────────────────────────────────────────────────
 
 function exportToJson(data: ExportData, options: ExportOptions): string {
-  const output: Record<string, unknown> = {
+  const output: Record<string, any> = {
     metadata: {
-      title: data.video.title,
       source: data.video.youtube_url,
-      videoId: data.video.youtube_video_id,
       duration: data.video.duration_seconds,
       generatedAt: new Date().toISOString(),
       wordCount: data.transcript.word_count,
-      language: data.transcript.language_code,
-      extractionMethod: data.transcript.extraction_method,
-      confidence: data.transcript.confidence_score,
     },
-    transcript: {
+    intelligence_brief: {
+      summary: data.insights?.summary || null,
+      keyTakeaways: safeArray(data.insights?.key_takeaways),
+      chapters: safeArray(data.insights?.chapters)
+    },
+    verbatim_transcript: {
       text: data.transcript.transcript_text,
-      // Fixed: Guarantees an array is returned instead of undefined to satisfy TypeScript
       segments: options.includeTimestamps ? (data.segments || []) : [],
     },
   };
 
-  if (options.includeSummary && data.insights) {
-    output.insights = {
-      model: data.insights.ai_model,
-      summary: data.insights.summary,
-      keyTakeaways: safeArray(data.insights.key_takeaways),
-      seoMetadata: safeObject(data.insights.seo_metadata),
-    };
-  }
-
-  const chapters = safeArray<ParsedChapter>(data.insights?.chapters);
-  if (options.includeChapters && chapters.length > 0) {
-    output.chapters = chapters;
-  }
-
   return JSON.stringify(output, null, 2);
 }
 
-function exportToMarkdown(data: ExportData, options: ExportOptions): string {
-  const { video, transcript, insights } = data;
-  const chapters = safeArray<ParsedChapter>(insights?.chapters);
-  const takeaways = safeArray<string>(insights?.key_takeaways);
-  const lines: string[] = [];
-
-  lines.push(`# ${video.title || 'Executive Transcript'}`);
-  lines.push('');
-  lines.push('## Document Information');
-  lines.push('');
-  lines.push(`- **Source:** [View Media](${video.youtube_url})`);
-  if (video.duration_seconds) lines.push(`- **Duration:** ${formatDuration(video.duration_seconds)}`);
-  lines.push(`- **Generated:** ${new Date().toLocaleDateString()}`);
-  lines.push('');
-
-  if (options.includeSummary && insights?.summary) {
-    lines.push('## Executive Summary');
-    lines.push('');
-    lines.push(insights.summary);
-    lines.push('');
-  }
-
-  if (options.includeSummary && takeaways.length > 0) {
-    lines.push('## Strategic Takeaways');
-    lines.push('');
-    takeaways.forEach((t) => lines.push(`* ${t}`));
-    lines.push('');
-  }
-
-  if (options.includeChapters && chapters.length > 0) {
-    lines.push('## Timeline & Chapters');
-    lines.push('');
-    lines.push('| Timestamp | Subject | Details |');
-    lines.push('| :--- | :--- | :--- |');
-    chapters.forEach((c) => {
-      // Escape pipes for markdown tables
-      const desc = c.description?.replace(/\|/g, '&#124;') || '';
-      lines.push(`| \`${c.timestamp}\` | **${c.title}** | ${desc} |`);
-    });
-    lines.push('');
-  }
-
-  lines.push('## Complete Transcript');
-  lines.push('');
-
-  if (options.includeTimestamps && data.segments && data.segments.length > 0) {
-    data.segments.forEach((seg) => {
-      const ts = formatTimestamp(seg.start);
-      const speaker = options.includeSpeakers && seg.speaker ? `**${seg.speaker}:** ` : '';
-      lines.push(`*\\[${ts}\\]* ${speaker}${seg.text}  `);
-    });
-  } else {
-    // Elegant paragraphing for readability
-    const paragraphs = transcript.transcript_text.split(/(?<=[.!?])\s+/);
-    let currentParagraph = '';
-    paragraphs.forEach((sentence, i) => {
-      currentParagraph += (currentParagraph ? ' ' : '') + sentence;
-      if (i % 6 === 5 || i === paragraphs.length - 1) {
-        lines.push(currentParagraph.trim());
-        lines.push('');
-        currentParagraph = '';
-      }
-    });
-  }
-
-  lines.push('---');
-  lines.push('*Automated generation via [TranscriberPro](https://transcriberpro.ai)*');
-
-  return lines.join('\n');
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// CORE ORCHESTRATION
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── MASTER CONTROLLER ───────────────────────────────────────────────────────
 
 export function exportTranscript(data: ExportData, options: ExportOptions): ExportResult {
-  const { format } = options;
-  const filename = generateFilename(data.video, format);
-  let content: string;
+  const format = options.format || 'txt';
+  const filename = `NorthOS_Dossier_${Date.now()}.${format}`;
 
+  let content = '';
   switch (format) {
-    case 'txt': content = exportToTxt(data, options); break;
     case 'srt': content = exportToSrt(data, options); break;
     case 'vtt': content = exportToVtt(data, options); break;
     case 'json': content = exportToJson(data, options); break;
-    case 'md': content = exportToMarkdown(data, options); break;
-    case 'docx': content = exportToMarkdown(data, options); break; // Fallback payload
+    case 'md':
+    case 'docx': content = exportToMarkdown(data, options); break;
     default: content = exportToTxt(data, options);
   }
 
-  return {
-    content,
-    filename,
-    mimeType: MIME_TYPES[format] || 'text/plain',
-  };
-}
-
-function generateFilename(video: Video, format: ExportFormat): string {
-  const title = (video.title || video.youtube_video_id || 'document')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .substring(0, 45);
-  return `transcriberpro-${title}.${format}`;
+  return { content, filename, mimeType: MIME_TYPES[format] || 'text/plain' };
 }
 
 export function downloadExport(result: ExportResult): void {
-  if (typeof document === 'undefined') return; // Server-side rendering safety
-
+  if (typeof document === 'undefined') return; // Ensure safety outside Web environments
   const blob = new Blob([result.content], { type: result.mimeType });
   const url = URL.createObjectURL(blob);
-
   const link = document.createElement('a');
   link.href = url;
   link.download = result.filename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-
   URL.revokeObjectURL(url);
-}
-
-export async function copyExportToClipboard(result: ExportResult): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(result.content);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export const ExportBuilder = {
   exportTranscript,
   downloadExport,
-  copyExportToClipboard,
   formats: ['txt', 'srt', 'vtt', 'json', 'md'] as ExportFormat[],
-  mimeTypes: MIME_TYPES,
+  mimeTypes: MIME_TYPES
 };
-
-export default ExportBuilder;

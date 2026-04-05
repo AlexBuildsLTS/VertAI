@@ -3,231 +3,142 @@
  * Sovereign Interactive Intelligence Viewer
  * ----------------------------------------------------------------------------
  * FEATURES:
- * 1. DUAL-RENDER ENGINE: Toggles between Raw Verbatim and Segmented Timeline.
- * 2. NEURAL MAPPING: Connects timestamps to Deepgram segments.
- * 3. DIARIZATION SUPPORT: Distinct styling for detected speakers.
- * 4. PERFORMANCE TUNED: Uses memoization to prevent lag on long 1hr+ transcripts.
+ * 1. SIDE-BY-SIDE ARCHITECTURE: No tabs. Timeline and Raw Text are displayed simultaneously.
+ * 2. VERTICAL LINE CHART: Connects chapter nodes with a continuous tracking line.
+ * 3. MASSIVE DATA HANDLING: Optimized Text rendering for 10,000+ word verbatim transcripts.
+ * 4. STRICT TYPES: Accepts exact undefined/string types to satisfy Supabase schema.
  */
 
-import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  Platform,
-} from 'react-native';
-import { Transcript, TranscriptSegment, Chapter } from '../../types/api';
-import { formatTimestamp } from '../../utils/formatters/time';
+import React from 'react';
+import { View, Text } from 'react-native';
+import { Chapter } from '../../types/api';
 import { cn } from '../../lib/utils';
-import {
-  Clock,
-  AlignLeft,
-  ListTree,
-  Copy,
-  User,
-  Hash,
-} from 'lucide-react-native';
-import * as Clipboard from 'expo-clipboard';
+import { Milestone, Zap, Terminal } from 'lucide-react-native';
 import { FadeIn } from '../animations/FadeIn';
 
 interface TranscriptViewerProps {
-  transcript: Transcript | null | undefined;
+  transcriptText?: string;
   chapters?: Chapter[];
-  activeColor?: string;
+  extractionMethod?: string;
+  wordCount?: number;
 }
 
 export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
-  transcript,
+  transcriptText,
   chapters = [],
-  activeColor = '#00F0FF',
+  extractionMethod,
+  wordCount,
 }) => {
-  const [viewMode, setViewMode] = useState<'timeline' | 'raw'>('timeline');
-
-  // 1. NEURAL DATA PARSING
-  // Safely extract segments from the Deepgram/Scraper JSON payload
-  const segments: TranscriptSegment[] = useMemo(() => {
-    if (!transcript?.transcript_json) return [];
-
-    // Support for both direct arrays and object-wrapped segments
-    if (Array.isArray(transcript.transcript_json))
-      return transcript.transcript_json;
-    if (transcript.transcript_json.segments)
-      return transcript.transcript_json.segments;
-
-    return [];
-  }, [transcript]);
-
-  // 2. COPY LOGIC
-  const copyRaw = async () => {
-    if (transcript?.transcript_text) {
-      await Clipboard.setStringAsync(transcript.transcript_text);
-    }
-  };
-
-  if (!transcript) {
-    return (
-      <View className="p-12 border border-white/5 bg-white/[0.01] rounded-[40px] items-center justify-center">
-        <Hash size={32} color="#ffffff20" />
-        <Text className="mt-4 text-white/20 font-mono text-[10px] uppercase tracking-[5px]">
-          Awaiting_Data_Stream
-        </Text>
-      </View>
-    );
-  }
+  const hasChapters = chapters && chapters.length > 0;
 
   return (
-    <View className="w-full">
-      {/* ── INTERFACE CONTROLS ────────────────────────────────────────── */}
-      <View className="flex-row items-center justify-between px-2 mb-6">
-        <View className="flex-row bg-white/[0.03] border border-white/10 rounded-2xl p-1">
-          <TouchableOpacity
-            onPress={() => setViewMode('timeline')}
-            className={cn(
-              'flex-row items-center px-4 py-2 rounded-xl transition-all',
-              viewMode === 'timeline' ? 'bg-blue-500/20' : 'bg-transparent',
-            )}
-          >
-            <Clock
-              size={14}
-              color={viewMode === 'timeline' ? activeColor : '#ffffff40'}
-            />
-            <Text
-              className={cn(
-                'ml-2 text-[10px] font-bold uppercase tracking-widest',
-                viewMode === 'timeline' ? 'text-blue-400' : 'text-white/40',
-              )}
-            >
-              Timeline
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setViewMode('raw')}
-            className={cn(
-              'flex-row items-center px-4 py-2 rounded-xl transition-all',
-              viewMode === 'raw' ? 'bg-blue-500/20' : 'bg-transparent',
-            )}
-          >
-            <AlignLeft
-              size={14}
-              color={viewMode === 'raw' ? activeColor : '#ffffff40'}
-            />
-            <Text
-              className={cn(
-                'ml-2 text-[10px] font-bold uppercase tracking-widest',
-                viewMode === 'raw' ? 'text-blue-400' : 'text-white/40',
-              )}
-            >
-              Verbatim
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity
-          onPress={copyRaw}
-          className="p-3 bg-white/[0.03] border border-white/10 rounded-2xl active:scale-95"
-        >
-          <Copy size={16} color="#fff" opacity={0.4} />
-        </TouchableOpacity>
-      </View>
-
-      {/* ── RENDERING ENGINE ─────────────────────────────────────────── */}
-      <View className="min-h-[400px]">
-        {viewMode === 'timeline' ? (
-          segments.length > 0 ? (
-            <View className="gap-y-6">
-              {segments.map((seg, idx) => {
-                // Find if this segment falls under a specific chapter
-                const currentChapter = chapters.find((c) => {
-                  const [m, s] = c.timestamp.split(':').map(Number);
-                  const chapterSec = m * 60 + s;
-                  return seg.start >= chapterSec && seg.start < chapterSec + 30; // 30s window logic
-                });
-
-                return (
-                  <FadeIn key={`${idx}-${seg.start}`} delay={idx * 30}>
-                    <View className="flex-row">
-                      {/* Left: Metadata Gutter */}
-                      <View className="w-20 pt-1">
-                        <Text className="text-[10px] font-mono text-blue-400 font-bold opacity-60">
-                          {formatTimestamp(seg.start)}
-                        </Text>
-                        {seg.speaker && (
-                          <View className="flex-row items-center mt-1">
-                            <User size={8} color="#A855F7" />
-                            <Text className="ml-1 text-[8px] font-black text-purple-400 uppercase">
-                              SPK_{seg.speaker}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Right: Content Card */}
-                      <View className="relative flex-1 pb-6 pl-6 border-l border-white/5">
-                        {/* Chapter Indicator Dot */}
-                        {currentChapter && (
-                          <View className="absolute -left-[5px] top-2 w-[9px] h-[9px] rounded-full bg-blue-400 shadow-[0_0_10px_#00F0FF]" />
-                        )}
-
-                        {currentChapter && (
-                          <Text className="text-[9px] font-black text-blue-400 uppercase tracking-[2px] mb-2">
-                            Chapter: {currentChapter.title}
-                          </Text>
-                        )}
-
-                        <Text className="text-sm font-medium leading-7 text-white/80 md:text-base">
-                          {seg.text}
-                        </Text>
-                      </View>
-                    </View>
-                  </FadeIn>
-                );
-              })}
-            </View>
-          ) : (
-            /* Fallback if segments are missing but raw text exists */
-            <View className="p-8 border border-white/10 bg-white/[0.02] rounded-[40px]">
-              <View className="flex-row items-center mb-6">
-                <ListTree size={16} color="#fbbf24" />
-                <Text className="ml-3 text-[10px] font-bold text-amber-400 uppercase tracking-widest">
-                  Metadata Limited: Falling back to raw stream
-                </Text>
-              </View>
-              <Text className="text-base italic leading-8 text-white/60">
-                {transcript.transcript_text}
+    <View className="w-full pt-10 mt-10 border-t border-white/5">
+      <View className="flex-col gap-12 lg:flex-row lg:gap-16">
+        {/* ── LEFT COLUMN: TIMELINE MAPPING (Purple Line Chart) ── */}
+        {hasChapters && (
+          <FadeIn delay={200} className="w-full lg:w-2/5 xl:w-1/3">
+            <View className="flex-row items-center mb-10">
+              <Milestone size={22} color="#C084FC" />
+              <Text className="text-white/50 text-[11px] md:text-xs font-black uppercase tracking-[5px] ml-4">
+                Timeline Mapping
               </Text>
             </View>
-          )
-        ) : (
-          /* RAW VERBATIM VIEW */
-          <FadeIn>
-            <View className="p-10 border border-white/10 bg-white/[0.01] rounded-[40px]">
-              <Text className="text-lg font-light leading-9 tracking-tight text-white/70">
-                {transcript.transcript_text}
-              </Text>
 
-              <View className="flex-row items-center justify-between pt-8 mt-12 border-t border-white/5">
-                <View>
-                  <Text className="text-white/20 text-[9px] font-black uppercase tracking-[3px]">
-                    Decryption Method
-                  </Text>
-                  <Text className="text-blue-400/50 font-mono text-[10px] mt-1 uppercase">
-                    {transcript.extraction_method || 'Unknown_Node'}
-                  </Text>
+            <View className="relative pl-2 md:pl-4">
+              {/* Continuous Vertical Line */}
+              <View className="absolute left-[41px] md:left-[45px] top-6 bottom-6 w-[2px] bg-white/10 rounded-full" />
+
+              {chapters.map((chapter, idx) => (
+                <View
+                  key={idx}
+                  className="relative flex-row items-start mb-10 group"
+                >
+                  {/* Glowing Node Dot */}
+                  <View className="absolute left-[36px] md:left-[40px] top-[14px] w-[12px] h-[12px] rounded-full bg-[#07070E] border-[2px] border-purple-500 shadow-[0_0_15px_#C084FC] z-10 transition-transform group-hover:scale-125 group-hover:bg-purple-400" />
+
+                  {/* Timestamp Label */}
+                  <View className="items-end pt-1 pr-6 w-14 md:w-16">
+                    <Text className="text-[10px] md:text-[11px] font-bold font-mono text-purple-400/80 group-hover:text-purple-400 transition-colors">
+                      {chapter.timestamp}
+                    </Text>
+                  </View>
+
+                  {/* Chapter Content Summary */}
+                  <View className="flex-1 p-6 md:p-8 bg-[#0a0a14]/90 border border-white/5 rounded-[30px] ml-4 shadow-lg transition-all group-hover:bg-[#0f0f1a] group-hover:border-white/10 group-hover:-translate-y-1">
+                    <Text className="mb-3 text-lg font-black tracking-tight text-white md:text-xl">
+                      {chapter.title}
+                    </Text>
+                    {chapter.description && (
+                      <Text className="text-sm font-medium leading-relaxed transition-colors text-white/50 md:text-base group-hover:text-white/80">
+                        {chapter.description}
+                      </Text>
+                    )}
+                  </View>
                 </View>
-                <View className="items-end">
-                  <Text className="text-white/20 text-[9px] font-black uppercase tracking-[3px]">
-                    Total Bitrate
-                  </Text>
-                  <Text className="text-white/40 font-mono text-[10px] mt-1">
-                    {transcript.word_count || 0} WORDS
-                  </Text>
-                </View>
-              </View>
+              ))}
             </View>
           </FadeIn>
         )}
+
+        {/* ── RIGHT COLUMN: RAW VERBATIM TRANSCRIPT ── */}
+        <FadeIn
+          delay={300}
+          className={cn(
+            'w-full',
+            hasChapters ? 'lg:w-3/5 xl:w-2/3' : 'lg:w-full',
+          )}
+        >
+          <View className="flex-row items-center mb-10">
+            <Zap size={22} color="#34D399" />
+            <Text className="text-white/50 text-[11px] md:text-xs font-black uppercase tracking-[5px] ml-4">
+              Verbatim Data Stream
+            </Text>
+          </View>
+
+          {transcriptText ? (
+            <View className="p-8 md:p-12 border bg-[#05050A]/80 border-white/5 rounded-[40px] relative overflow-hidden shadow-2xl">
+              {/* Background ambient glow inside the text box */}
+              <View
+                className="absolute top-0 right-0 w-full h-40 bg-emerald-500/5 blur-[80px]"
+                pointerEvents="none"
+              />
+
+              <Text
+                className="text-base md:text-lg font-medium leading-[36px] md:leading-[42px] tracking-wide text-white/80"
+                style={{ textAlign: 'justify' }}
+              >
+                {transcriptText}
+              </Text>
+
+              {/* Technical Footer */}
+              <View className="flex-row items-center justify-between pt-10 mt-12 border-t border-white/5">
+                <View>
+                  <Text className="text-white/30 text-[9px] md:text-[10px] font-black uppercase tracking-[3px]">
+                    Decryption Node
+                  </Text>
+                  <Text className="mt-2 font-mono text-[10px] md:text-xs uppercase text-emerald-400/80">
+                    {extractionMethod || 'SYSTEM_DEFAULT'}
+                  </Text>
+                </View>
+                <View className="items-end">
+                  <Text className="text-white/30 text-[9px] md:text-[10px] font-black uppercase tracking-[3px]">
+                    Data Volume
+                  </Text>
+                  <Text className="mt-2 font-mono text-[10px] md:text-xs uppercase tracking-widest text-white/70">
+                    {wordCount?.toLocaleString() || 0} WORDS
+                  </Text>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <View className="items-center justify-center p-16 border border-white/5 rounded-[40px] bg-black/20">
+              <Terminal size={32} color="#ffffff20" />
+              <Text className="mt-6 font-mono text-xs text-white/30 uppercase tracking-[4px]">
+                Data Stream Unavailable
+              </Text>
+            </View>
+          )}
+        </FadeIn>
       </View>
     </View>
   );

@@ -14,12 +14,12 @@
 
 **TranscriberPro** is an enterprise-tier universal video transcription and audio-intelligence platform engineered for the modern digital landscape.
 
-It converts any video link (Vimeo, Patreon, social platforms, direct streams, educational portals) to searchable text in under 30 seconds using a multi-stage, cost-optimized AI pipeline. Leveraging Deepgram Nova-2 for elite speech recognition and Google Gemini 2.5 Flash for zero-touch SEO metadata, chapter generation, and key takeaway extraction. Built for content creators, researchers, and compliance teams who need instant, accurate, structured transcripts within a 120fps glassmorphism UI.
+It converts any video link (Vimeo, Patreon, social platforms, direct streams, educational portals) to searchable text in under 30 seconds using a multi-stage, cost-optimized AI pipeline. Leveraging Deepgram Nova-2 for elite speech recognition and Google Gemini 3 Flash Preview Flash for zero-touch SEO metadata, chapter generation, and key takeaway extraction. Built for content creators, researchers, and compliance teams who need instant, accurate, structured transcripts within a 120fps glassmorphism UI.
 
 **Tech Stack:**
 EXPO SDK 55 | REACT NATIVE 0.83 | TYPESCRIPT | REANIMATED V4
 NATIVEWIND V4 | SUPABASE (POSTGRESQL) | DENO EDGE FUNCTIONS
-DEEPGRAM NOVA-2 | GOOGLE GEMINI 2.5 FLASH | TANSTACK QUERY | ZUSTAND
+DEEPGRAM NOVA-2 | GOOGLE Gemini 3 Flash Preview FLASH | TANSTACK QUERY | ZUSTAND
 
 ---
 
@@ -30,7 +30,7 @@ DEEPGRAM NOVA-2 | GOOGLE GEMINI 2.5 FLASH | TANSTACK QUERY | ZUSTAND
 | **1. Waterfall Cost Optimization** | Tiered Extraction (`process-video`) | **API Credit Shield:** Attempts $0 scraping via native closed captions first. Only falls back to paid APIs (Deepgram/RapidAPI) if absolutely necessary. |
 | **2. Anti-Block Architecture**     | Multi-proxy Audio Routing           | **Unstoppable Reliability:** Rotates between Premium APIs and high-volume Cobalt nodes to bypass CDN/datacenter IP blocking.                            |
 | **3. Lightning Transcription**     | Deepgram Nova-2 API                 | **Sub-30s Processing:** Handles massive audio streams with industry-leading speed, formatting, and diarization.                                         |
-| **4. Executive AI Engine**         | Google Gemini 2.5 Flash             | **Zero-Touch SEO:** Auto-generates Markdown-rich chapters, executive summaries, and high-conversion SEO metadata.                                       |
+| **4. Executive AI Engine**         | Google Gemini 3 Flash Preview Flash             | **Zero-Touch SEO:** Auto-generates Markdown-rich chapters, executive summaries, and high-conversion SEO metadata.                                       |
 | **5. "Liquid Neon" UX**            | React Native 0.83 + NativeWind v4   | **Elite 120fps Experience:** A premium dark-mode Bento Box UI featuring hardware-accelerated GlassCards and Reanimated transitions.                     |
 
 ---
@@ -48,7 +48,7 @@ sequenceDiagram
     participant Scraper as L1: Captions API<br/>(Cost: $0)
     participant Audio as L2: Audio Proxy<br/>(Premium/Cobalt)
     participant STT as L3: Deepgram<br/>Nova-2
-    participant AI as L4: Gemini 2.5 Flash
+    participant AI as L4: Gemini 3 Flash Preview Flash
 
     User->>DB: INSERT video (status = queued)
     DB-->>User: Return video_id
@@ -145,7 +145,7 @@ TranscriberPro
 Enterprise-grade universal video transcription & audio intelligence platform.
 Converts any media URL to searchable text in under 30 seconds using
 a multi-stage, cost-optimized AI pipeline. Uses Deepgram Nova-2 for speech
-recognition and Google Gemini 2.5 Flash for zero-touch SEO metadata, chapter
+recognition and Google Gemini 3 Flash Preview Flash for zero-touch SEO metadata, chapter
 generation, and key takeaway extraction. Built for content creators, researchers,
 and compliance teams who need instant, accurate, structured transcripts
 with a 120fps glassmorphism UI.
@@ -153,7 +153,7 @@ with a 120fps glassmorphism UI.
 Tech Stack Badges:
 EXPO SDK 55 | REACT NATIVE 0.83 | TYPESCRIPT | REANIMATED V4
 NATIVEWIND V4 | SUPABASE (POSTGRESQL) | DENO EDGE FUNCTIONS
-DEEPGRAM NOVA-2 | GOOGLE GEMINI 2.5 FLASH | TANSTACK QUERY | ZUSTAND
+DEEPGRAM NOVA-2 | GOOGLE Gemini 3 Flash Preview FLASH | TANSTACK QUERY | ZUSTAND
 ```
 
 ---
@@ -193,7 +193,7 @@ The project strictly adheres to Domain-Driven Design (DDD) tailored for Expo Rou
 │   │   │   ├── audio.ts      # - Audio proxy routing
 │   │   │   ├── captions.ts   # - Cost-saving metadata scraper
 │   │   │   ├── deepgram.ts   # - Deepgram Nova-2 Interface
-│   │   │   ├── insights.ts   # - Gemini 2.5 Flash Markdown Engine
+│   │   │   ├── insights.ts   # - Gemini 3 Flash Preview Flash Markdown Engine
 │   │   │   ├── utils.ts      # - DB Sanitization & URL normalization
 │   │   │   └── index.ts      # - Atomic Orchestrator
 │   │   └── webhook-handler/  # External service webhooks
@@ -218,7 +218,7 @@ The frontend utilizes a highly-optimized hybrid approach. **Zustand** (`store/us
 
 ### 2. The AI Insight Pipeline (GEMINI)
 
-Once the `process-video` Edge Function securely writes the Deepgram transcription to PostgreSQL, it passes the raw context directly to Google's Gemini 2.5 Flash. Its superior context window processes entire hour-long broadcasts in a single prompt to return perfectly structured JSON containing key takeaways, timestamps, and SEO-optimized descriptions.
+Once the `process-video` Edge Function securely writes the Deepgram transcription to PostgreSQL, it passes the raw context directly to Google's Gemini 3 Flash Preview Flash. Its superior context window processes entire hour-long broadcasts in a single prompt to return perfectly structured JSON containing key takeaways, timestamps, and SEO-optimized descriptions.
 
 ### 3. Real-Time UI Synchronization
 

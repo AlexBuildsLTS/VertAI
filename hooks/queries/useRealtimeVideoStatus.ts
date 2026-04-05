@@ -1,9 +1,9 @@
 /**
  * hooks/queries/useRealtimeVideoStatus.ts
- * Real-time Database Listener & Cache Invalidater
+ * Active WebSocket Listener & Store Synchronizer
  * ----------------------------------------------------------------------------
- * Connects to Supabase Realtime to listen for backend pipeline updates.
- * Perfectly synchronized with the enterprise useVideoStore methods.
+ * Listens to postgres updates on the specific video ID and pushes 
+ * updates straight into the Zustand global store and React Query cache.
  */
 
 import { useEffect } from 'react';
@@ -16,13 +16,11 @@ type VideoRow = Database['public']['Tables']['videos']['Row'];
 
 export const useRealtimeVideoStatus = (videoId: string | null) => {
   const queryClient = useQueryClient();
-  
-  // FIXED: Destructuring the exact method names exported by the updated useVideoStore
-  const { setActiveJob, syncStatus, refreshLocalVideo } = useVideoStore();
+  const { setActiveVideoId, setError } = useVideoStore();
 
-  // Initial fetch of the video data
+  // 1. Initial State Fetch
   const { data, isLoading, error } = useQuery({
-    queryKey: ['video', videoId],
+    queryKey: ['video_base', videoId],
     queryFn: async () => {
       if (!videoId) return null;
       const { data: dbData, error: dbError } = await supabase
@@ -31,20 +29,21 @@ export const useRealtimeVideoStatus = (videoId: string | null) => {
         .eq('id', videoId)
         .single();
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        if (dbError.code === 'PGRST116') return null;
+        throw new Error(dbError.message);
+      }
       return dbData as VideoRow;
     },
     enabled: !!videoId,
   });
 
-  // Synchronize the initial data load with our global store
+  // 2. Link initial state to global store
   useEffect(() => {
-    if (data) {
-      setActiveJob(data);
-    }
-  }, [data, setActiveJob]);
+    if (videoId) setActiveVideoId(videoId);
+  }, [videoId, setActiveVideoId]);
 
-  // Establish the Supabase Realtime WebSocket connection
+  // 3. Establish WebSocket Connection
   useEffect(() => {
     if (!videoId) return;
 
@@ -60,28 +59,36 @@ export const useRealtimeVideoStatus = (videoId: string | null) => {
         },
         (payload) => {
           const updatedRow = payload.new as VideoRow;
-          
-          // FIXED: Using the synchronized store methods to update the UI instantly
-          syncStatus(updatedRow.status, updatedRow.error_message);
-          refreshLocalVideo(updatedRow);
 
-          // Update React Query's internal cache
-          queryClient.setQueryData(['video', videoId], updatedRow);
+          // Push fatal errors directly to the UI overlay
+          if (updatedRow.status === 'failed' && updatedRow.error_message) {
+            setError(updatedRow.error_message);
+          }
 
-          // Once the backend orchestrator finishes, force a refetch of the final assets
-          if (updatedRow.status === 'completed') {
-            queryClient.invalidateQueries({ queryKey: ['transcripts', videoId] });
-            queryClient.invalidateQueries({ queryKey: ['ai_insights', videoId] });
+          // Instantly update the relational query cache to reflect the new status
+          queryClient.setQueryData(['video_relational', videoId], (oldData: any) => {
+            if (!oldData) return updatedRow;
+            return { ...oldData, ...updatedRow };
+          });
+
+          // Trigger a full relational refetch if the pipeline completes
+          if (updatedRow.status === 'completed' || updatedRow.status === 'failed') {
+            queryClient.invalidateQueries({ queryKey: ['video_relational', videoId] });
+            queryClient.invalidateQueries({ queryKey: ['video-history'] });
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`[Realtime] Synchronized with Node ${videoId.slice(0, 8)}`);
+        }
+      });
 
-    // Cleanup the WebSocket channel when the component unmounts
+    // Teardown sequence
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [videoId, syncStatus, refreshLocalVideo, queryClient]);
+  }, [videoId, queryClient, setError]);
 
   return { data, isLoading, error };
 };

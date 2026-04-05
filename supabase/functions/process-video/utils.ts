@@ -1,10 +1,10 @@
 /**
  * supabase/functions/process-video/utils.ts
- * Ironclad Utility Suite - Enterprise Production Tier
+ * Ironclad Utility Suite - Enterprise Production Tier (2026)
  * ----------------------------------------------------------------------------
  * FEATURES:
- * 1. DATABASE SAFETY: Null-byte scrubbing (\u0000) prevents Postgres insertion crashes.
- * 2. MULTI-CONTEXT IDENTIFIER: Advanced regex engine for all known YouTube URL variants.
+ * 1. DATABASE SAFETY: Null-byte scrubbing (\u0000) prevents Postgres crashes.
+ * 2. MULTI-CONTEXT IDENTIFIER: Advanced regex for all YouTube variants (Shorts, Live, Embeds).
  * 3. METRIC ANALYTICS: High-precision duration and reading time calculations.
  * 4. TYPE SAFETY: Strictly defined interfaces for JSON3 and VTT parsing.
  */
@@ -23,7 +23,6 @@ export interface Json3Data {
 
 /**
  * Calculates high-precision millisecond delta from a starting epoch.
- * @param startTime - The initial Date.now() timestamp.
  */
 export function diffMs(startTime: number): number {
   return Date.now() - startTime;
@@ -31,8 +30,7 @@ export function diffMs(startTime: number): number {
 
 /**
  * Enterprise Reading Time Calculator.
- * Derived using the global professional standard of 225 words per minute.
- * @param wordCount - Total words in the processed bitstream.
+ * Derived using the professional standard of 225 words per minute.
  */
 export function estimateReadingTime(wordCount: number): number {
   const wordsPerMinute = 225;
@@ -42,9 +40,8 @@ export function estimateReadingTime(wordCount: number): number {
 
 /**
  * PostgreSQL String Sanitizer.
- * MANDATORY: PostgreSQL driver crashes when encountering the null character (\u0000).
- * This function scrubs illegal bytes and normalizes whitespace for optimal storage.
- * @param text - The raw string data.
+ * MANDATORY: PostgreSQL driver crashes on the null character (\u0000).
+ * Scrubs illegal bytes and normalizes whitespace for optimal storage.
  */
 export function sanitizeForDb(text: string | null | undefined): string {
   if (!text) return '';
@@ -56,7 +53,7 @@ export function sanitizeForDb(text: string | null | undefined): string {
 
 /**
  * Sovereign YouTube Identifier Extraction Engine.
- * @param url - The raw source URL.
+ * Supports standard, shortened, shorts, live, and embed URLs.
  */
 export function extractYouTubeId(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -64,39 +61,29 @@ export function extractYouTubeId(url: string | null | undefined): string | null 
   try {
     const urlObject = new URL(url);
 
-    // Pattern Tier 1: Standard Query Parameters
+    // Pattern 1: Standard Query Parameters (?v=...)
     const queryId = urlObject.searchParams.get('v');
     if (queryId && /^[a-zA-Z0-9_-]{11}$/.test(queryId)) return queryId;
 
-    // Pattern Tier 2: Shortened Domain Logic
+    // Pattern 2: Shortened Domain (youtu.be/...)
     if (urlObject.hostname === 'youtu.be') {
       const pathId = urlObject.pathname.slice(1).split('?')[0];
       if (/^[a-zA-Z0-9_-]{11}$/.test(pathId)) return pathId;
     }
-
-    // Pattern Tier 3: Path segment analysis
-    const pathSegments = urlObject.pathname.split('/');
-    const idInPath = pathSegments.find((segment) => /^[a-zA-Z0-9_-]{11}$/.test(segment));
-    if (idInPath) return idInPath;
   } catch {
-    // URL constructor failed (malformed protocol), executing emergency regex fallback
+    // Fallback to regex if URL constructor fails
   }
 
-  // Pattern Tier 4: Aggressive Regex Shield
+  // Pattern 3: Aggressive Regex Shield for Shorts, Live, and Embeds
   const masterRegex = /(?:v=|\/|youtu\.be\/|shorts\/|embed\/|live\/)([a-zA-Z0-9_-]{11})/;
   const matchResult = url.match(masterRegex);
 
-  if (matchResult && matchResult[1]) {
-    return matchResult[1];
-  }
-
-  return null;
+  return (matchResult && matchResult[1]) ? matchResult[1] : null;
 }
 
 /**
  * YouTube JSON3 Event Decoder.
- * Parses undocumented internal event streams into normalized executive text.
- * @param jsonData - The raw object or string retrieved from the TimedText API.
+ * Parses undocumented internal event streams into normalized text.
  */
 export function parseJson3(jsonData: unknown): string | null {
   if (!jsonData) return null;
@@ -106,55 +93,45 @@ export function parseJson3(jsonData: unknown): string | null {
       ? JSON.parse(jsonData)
       : jsonData) as Json3Data;
 
-    // Verify root structure integrity
     if (!data?.events || !Array.isArray(data.events)) {
       return null;
     }
 
-    const segments = data.events as Json3Event[];
-
-    const processedText = segments
+    // Use a more memory-efficient reduction for massive transcripts
+    const processedText = data.events
       .filter((event: Json3Event) => event.segs && Array.isArray(event.segs))
-      .flatMap((event: Json3Event) =>
-        event.segs!.map((segment: Json3Segment) => (segment.utf8 ?? '').replace(/\n/g, ' '))
-      )
+      .reduce((acc: string[], event: Json3Event) => {
+        const line = event.segs!.map((s) => s.utf8 ?? '').join('');
+        if (line) acc.push(line);
+        return acc;
+      }, [])
       .join(' ')
       .replace(/\s+/g, ' ')
       .trim();
 
-    // Minimum character boundary check
     return processedText.length > 50 ? processedText : null;
   } catch (parseErr: any) {
-    console.error('[UTILS:JSON3] Parsing exception encountered:', parseErr.message);
+    console.error('[UTILS:JSON3] Parsing exception:', parseErr.message);
     return null;
   }
 }
 
 /**
  * Legacy VTT (Web Video Text Tracks) Sanitizer.
- * Strips technical headers, CSS descriptors, and precise timestamps from VTT streams.
- * Optimized with non-backtracking patterns to prevent ReDoS.
- * @param vttContent - The raw VTT string.
  */
 export function stripVtt(vttContent: string): string {
   if (!vttContent) return '';
 
   return vttContent
-    // Remove WEBVTT headers and global style blocks
     .replace(/^WEBVTT[\s\S]*?\n\n/i, '')
-    // Remove standard duration markers (00:00:00.000 --> 00:00:01.000)
     .replace(/^\d{2,}:\d{2}:\d{2}\.\d{3}\s+-->\s+.*$/gm, '')
-    // Remove standalone floating timestamps
     .replace(/^\d{2,}:\d{2}:\d{2}\.\d{3}$/gm, '')
-    // Remove inline XML/HTML style tags (e.g. <c.color>)
     .replace(/<[^>]+>/g, '')
-    // HTML entity decoding layer for common auto-caption characters
     .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')
-    // Structural normalization
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
@@ -165,15 +142,13 @@ export function stripVtt(vttContent: string): string {
 
 /**
  * Semantic Keyword Analytics.
- * Generates frequency-based metadata for automated tagging and SEO.
- * @param text - The full transcript text.
- * @param limit - Max number of keywords to return.
+ * Generates frequency-based metadata for automated tagging.
  */
 export function getKeywordDensity(text: string, limit = 10): string[] {
   if (!text) return [];
 
-  // Extract words longer than 4 characters to filter out common stop-words
-  const words = text.toLowerCase().match(/\b(\w{4,})\b/g);
+  // Filter for words > 4 chars to ignore stop-words
+  const words = text.toLowerCase().match(/\b(\w{5,})\b/g);
   if (!words) return [];
 
   const frequencyMap: Record<string, number> = {};
@@ -181,7 +156,6 @@ export function getKeywordDensity(text: string, limit = 10): string[] {
     frequencyMap[word] = (frequencyMap[word] || 0) + 1;
   });
 
-  // Sort by occurrence and return top results
   return Object.entries(frequencyMap)
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)

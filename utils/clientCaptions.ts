@@ -1,94 +1,96 @@
 /**
  * utils/clientCaptions.ts
- * Hardened Client-Side Metadata Scraper
- * * Features:
- * - Multi-proxy rotation (CORS bypass)
- * - Deep JSON traversal for undocumented YouTube internal schemas
- * - Aggressive sanitization of raw byte-streams
- * - Zero-crash architecture
+ * Client-Side YouTube Caption Extractor
  */
+
+interface TimedTextSegment {
+  utf8?: string;
+}
+
+interface TimedTextEvent {
+  segs?: TimedTextSegment[];
+  tStartMs?: number;
+  dDurationMs?: number;
+}
+
+interface TimedTextResponse {
+  events?: TimedTextEvent[];
+}
 
 export async function fetchClientCaptions(
   videoId: string,
   platform: string = 'youtube',
 ): Promise<string | null> {
-  // Currently optimized for YouTube native extraction
   if (!videoId || platform !== 'youtube') return null;
 
-  console.log(`[Scraper:DEBUG] Starting extraction for ID: ${videoId}`);
+  console.log(`[Captions:Client] Extracting for ${videoId}...`);
 
-  const languageCodes = ['en', 'en-US', 'en-GB', 'a.en', 'en-CA', 'en-AU'];
+  const languageCodes = ['en', 'a.en', 'en-US', 'en-GB'];
 
-  /**
-   * PROXY ROTATION LIST
-   * These are prioritized by reliability and speed.
-   */
-  const proxyHosts = [
-    'https://api.allorigins.win/raw?url=',
-    'https://corsproxy.io/?',
-    'https://api.codetabs.com/v1/proxy?quest=',
-    'https://thingproxy.freeboard.io/fetch/',
-    'https://proxy.cors.sh/',
-    'https://jsonp.afeld.me/?url='
+  const proxies = [
+    'https://corsproxy.io/?url=',         // Highest reliability for small payloads (like JSON transcripts)
+    'https://api.allorigins.win/raw?url=', // Solid fallback, though can be slower
+    'https://cors.sh',              // High-speed modern alternative often used as a replacement for cors-anywhere
+    'https://api.codetabs.com/v1/proxy?quest=', // Good backup with a 5MB per-request limit
+    'https://workers.dev?'      // Cloudflare-based proxy that handles moderate traffic well
   ];
 
-  for (const proxy of proxyHosts) {
-    for (const lang of languageCodes) {
-      try {
-        const targetUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}&fmt=json3`;
-        
-        // Dynamic encoding based on proxy requirements
-        const fetchUrl = proxy.includes('allorigins') || proxy.includes('jsonp')
-          ? `${proxy}${encodeURIComponent(targetUrl)}`
-          : `${proxy}${targetUrl}`;
+  const parseTranscript = async (
+    proxy: string,
+    lang: string,
+    signal: AbortSignal,
+  ): Promise<string> => {
+    const targetUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}&fmt=json3`;
 
-        // 4-second aggressive timeout per proxy attempt
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+    // All proxies require the full target URL to be encoded so that
+    // query parameters (&lang=, &fmt=) are not misread as the proxy's own params.
+    const response = await fetch(`${proxy}${encodeURIComponent(targetUrl)}`, {
+      headers: { Accept: 'application/json' },
+      signal,
+    });
 
-        const res = await fetch(fetchUrl, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-          },
-          signal: controller.signal,
-        });
+    if (!response.ok) throw new Error(`HTTP_${response.status}`);
 
-        clearTimeout(timeoutId);
+    const data = await response.json() as TimedTextResponse;
 
-        if (!res.ok) continue;
+    if (!data?.events || !Array.isArray(data.events)) {
+      throw new Error('NO_EVENTS');
+    }
 
-        const data = await res.json();
+    const text = data.events
+      .filter((e): e is TimedTextEvent & { segs: TimedTextSegment[] } =>
+        Array.isArray(e.segs)
+      )
+      .map(e => e.segs.map(s => s.utf8 ?? '').join(''))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .replace(/\\n/g, ' ')
+      .trim();
 
-        // VALIDATION: YouTube JSON3 Response Structure
-        if (data && data.events && Array.isArray(data.events)) {
-          const processedText = data.events
-            .filter((event: any) => event.segs && Array.isArray(event.segs))
-            .map((event: any) => {
-              return event.segs
-                .map((seg: any) => seg.utf8 || '')
-                .join('');
-            })
-            .join(' ')
-            .replace(/\s+/g, ' ') // Sanitize multiple spaces
-            .replace(/\\n/g, ' ') // Sanitize literal newlines
-            .trim();
+    if (text.length < 50) throw new Error('TOO_SHORT');
 
-          // Ensure we have a substantive transcript before returning
-          if (processedText.length > 100) {
-            console.log(`[Scraper:SUCCESS] Logic finalized via proxy: ${new URL(proxy).hostname}`);
-            return processedText;
-          }
-        }
-      } catch (e: any) {
-        // Silently fail and rotate to next proxy/language pair
-        // This is intentional to prevent UI flickering or crashes.
-        continue;
-      }
+    return text;
+  };
+
+  for (const proxy of proxies) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const transcript = await Promise.any(
+        languageCodes.map(lang => parseTranscript(proxy, lang, controller.signal)),
+      );
+      clearTimeout(timeoutId);
+      const host = proxy.split('/')[2];
+      console.log(`[Captions:Client] Success via ${host}. Words: ${transcript.split(/\s+/).length}`);
+      return transcript;
+    } catch {
+      clearTimeout(timeoutId);
+      const host = proxy.split('/')[2];
+      console.warn(`[Captions:Client] ${host} failed or timed out.`);
     }
   }
 
-  console.warn(`[Scraper:WARN] All frontend extraction methods exhausted for ${videoId}.`);
+  console.warn('[Captions:Client] All proxies exhausted. Deferring to edge.');
   return null;
 }

@@ -1,13 +1,18 @@
 /**
  * types/api/index.ts
  * Comprehensive type definitions for TranscriberPro API layer.
- * Standardized ExtractionMethod to match implementation.
+ * ----------------------------------------------------------------------------
+ * FEATURES:
+ * 1. 100% DB SYNC: Nullable fields perfectly match database.types.ts.
+ * 2. STRICT ENUMS: Extraction methods and statuses locked to DB enums.
+ * 3. EXPORT SCHEMAS: Formatted cleanly for the ExportBuilder.
  */
 
 export type VideoStatus =
   | 'idle'
   | 'queued'
   | 'downloading'
+  | 'transcribing'
   | 'ai_processing'
   | 'completed'
   | 'failed';
@@ -22,6 +27,7 @@ export type ExtractionMethod =
   | 'rapidapi'
   | 'deepgram'
   | 'client'
+  | 'gemini-3.1-flash-lite-preview'
   | 'unknown';
 
 export type ContentDifficulty = 'beginner' | 'standard' | 'advanced';
@@ -52,7 +58,7 @@ export interface ProcessVideoRequest {
 export interface ProcessVideoResponse {
   success: boolean;
   video_id: string;
-  method: ExtractionMethod;
+  method: ExtractionMethod | string;
   transcript_length: number;
   has_insights: boolean;
   error?: string;
@@ -61,7 +67,7 @@ export interface ProcessVideoResponse {
 export interface CaptionResult {
   text: string;
   json: unknown;
-  method: ExtractionMethod;
+  method: ExtractionMethod | string;
   language?: string;
   confidence?: number;
 }
@@ -87,13 +93,18 @@ export interface SeoMetadata {
 }
 
 export interface AiInsights {
-  ai_model: string; // FIXED: Renamed from 'model' to exactly match database.types.ts and exportBuilder.ts
+  id?: string;
+  video_id?: string;
+  ai_model: string;
   language: string;
-  summary: string;
+  summary: string | null; // Synced with DB
   chapters: Chapter[];
   key_takeaways: string[];
   seo_metadata: SeoMetadata;
-  tokens_used?: number;
+  tokens_used: number | null; // Synced with DB
+  processed_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface InsightsRequest {
@@ -122,7 +133,7 @@ export interface TranscriptJson {
   language?: string;
   duration?: number;
   word_count?: number;
-  source: ExtractionMethod;
+  source: ExtractionMethod | string;
 }
 
 export interface Transcript {
@@ -130,10 +141,11 @@ export interface Transcript {
   video_id: string;
   language_code: string;
   transcript_text: string;
-  transcript_json: TranscriptJson | null;
-  confidence_score: number;
-  word_count: number;
-  extraction_method: ExtractionMethod;
+  transcript_json: TranscriptJson | null; // Synced with DB
+  confidence_score: number | null; // Synced with DB
+  word_count: number | null; // Synced with DB
+  reading_time_minutes: number | null; // Synced with DB
+  extraction_method: string | null; // Synced with DB
   created_at: string;
 }
 
@@ -152,7 +164,7 @@ export interface Video {
   processing_started_at: string | null;
   processing_completed_at: string | null;
   processing_duration_ms: number | null;
-  retry_count: number;
+  retry_count: number | null;
   last_retry_at: string | null;
   batch_job_id: string | null;
   created_at: string;

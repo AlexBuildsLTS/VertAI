@@ -109,7 +109,7 @@ const TIER_FEATURES: Record<string, string[]> = {
     'Priority processing',
     'Videos up to 2 hours',
     'All caption + audio layers',
-    'Gemini 2.5 Pro + Claude AI',
+    'Gemini 3.1 Flash-Lite',
     'Export to SRT / VTT / JSON',
     'SLA support',
   ],

@@ -239,11 +239,14 @@ export default function SignInScreen() {
     signUp,
     router,
   ]);
- // ── Google OAuth ────────────────────────────────────────────────────────────
+  // ── Google OAuth ────────────────────────────────────────────────────────────
   async function handleGoogleSignIn() {
     setIsGoogleLoading(true);
     try {
-      const redirectTo = makeRedirectUri({ scheme: 'transcriberpro', path: 'auth/callback' });
+      const redirectTo = makeRedirectUri({
+        scheme: 'transcriberpro',
+        path: 'auth/callback',
+      });
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -259,12 +262,18 @@ export default function SignInScreen() {
           const accessToken = urlParams.searchParams.get('access_token');
           const refreshToken = urlParams.searchParams.get('refresh_token');
           if (accessToken && refreshToken) {
-            await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+            await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
           }
         }
       }
     } catch (e: any) {
-      Alert.alert('Google Sign In Failed', mapAuthError(e.message ?? 'Unknown error'));
+      Alert.alert(
+        'Google Sign In Failed',
+        mapAuthError(e.message ?? 'Unknown error'),
+      );
     } finally {
       setIsGoogleLoading(false);
     }
@@ -375,9 +384,7 @@ const BrandHeader = memo(({ authMode }: { authMode: AuthMode }) => (
   >
     <Image source={APP_ICON} style={styles.brandIcon} resizeMode="contain" />
     <Text className="text-white/40 font-mono text-[10px] uppercase tracking-[3px] mt-4 text-center">
-      {authMode === 'sign-in'
-        ? 'Secure Authenticator Node'
-        : 'CREATE ACCOUNT'}
+      {authMode === 'sign-in' ? 'Secure Authenticator Node' : 'CREATE ACCOUNT'}
     </Text>
   </Animated.View>
 ));
@@ -820,11 +827,16 @@ const styles = StyleSheet.create({
   brandHeader: { alignItems: 'center', marginBottom: 32 },
   brandIcon: { width: 100, height: 100 },
 });
-function makeRedirectUri({ scheme, path }: { scheme: string; path: string }): string {
+function makeRedirectUri({
+  scheme,
+  path,
+}: {
+  scheme: string;
+  path: string;
+}): string {
   return `${scheme}://${path}`;
 }
 
 function mapAuthError(arg0: any): any {
   throw new Error('Function not implemented.');
 }
-
