@@ -34,18 +34,20 @@
       "permissions": [
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET"
       ]
     },
     "web": {
       "bundler": "metro",
       "output": "static",
       "jsEngine": "jsc"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "d1b9c8c7-5a0b-4f1e-9c3a-2b6e5f8a9c3d"
-      }
     },
     "plugins": [
       "expo-router",
@@ -59,6 +61,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c1d22081-046b-4228-afc5-35389f7d88a2"
+      }
     }
   }
 }
