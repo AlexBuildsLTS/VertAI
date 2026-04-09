@@ -12,7 +12,7 @@
 
 ## 🌐 Universal Audio Intelligence 🌐
 
-**TranscriberPro** is an enterprise-tier universal video transcription and audio-intelligence platform engineered for the modern digital landscape.
+**VerAI** is an universal video transcription and audio-intelligence platform engineered for the modern digital landscape.
 
 It converts any video link (Vimeo, Patreon, social platforms, direct streams, educational portals) to searchable text in under 30 seconds using a multi-stage, cost-optimized AI pipeline. Leveraging Deepgram Nova-2 for elite speech recognition and Google Gemini 3 Flash Preview Flash for zero-touch SEO metadata, chapter generation, and key takeaway extraction. Built for content creators, researchers, and compliance teams who need instant, accurate, structured transcripts within a 120fps glassmorphism UI.
 
@@ -28,16 +28,16 @@ DEEPGRAM NOVA-2 | GOOGLE Gemini 3 Flash Preview FLASH | TANSTACK QUERY | ZUSTAND
 | Strategic Pillar                   | Technological Implementation        | Market Value Proposition                                                                                                                                |
 | :--------------------------------- | :---------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **1. Waterfall Cost Optimization** | Tiered Extraction (`process-video`) | **API Credit Shield:** Attempts $0 scraping via native closed captions first. Only falls back to paid APIs (Deepgram/RapidAPI) if absolutely necessary. |
-| **2. Anti-Block Architecture** | Multi-proxy Audio Routing           | **Unstoppable Reliability:** Rotates between Premium APIs and high-volume Cobalt nodes to bypass CDN/datacenter IP blocking.                            |
-| **3. Lightning Transcription** | Deepgram Nova-2 API                 | **Sub-30s Processing:** Handles massive audio streams with industry-leading speed, formatting, and diarization.                                         |
-| **4. Executive AI Engine** | Google Gemini 3 Flash Preview Flash             | **Zero-Touch SEO:** Auto-generates Markdown-rich chapters, executive summaries, and high-conversion SEO metadata.                                       |
-| **5. "Liquid Neon" UX** | React Native 0.83 + NativeWind v4   | **Elite 120fps Experience:** A premium dark-mode Bento Box UI featuring hardware-accelerated GlassCards and Reanimated transitions.                     |
+| **2. Anti-Block Architecture**     | Multi-proxy Audio Routing           | **Unstoppable Reliability:** Rotates between Premium APIs and high-volume Cobalt nodes to bypass CDN/datacenter IP blocking.                            |
+| **3. Lightning Transcription**     | Deepgram Nova-2 API                 | **Sub-30s Processing:** Handles massive audio streams with industry-leading speed, formatting, and diarization.                                         |
+| **4. Executive AI Engine**         | Google Gemini 3 Flash Preview Flash | **Zero-Touch SEO:** Auto-generates Markdown-rich chapters, executive summaries, and high-conversion SEO metadata.                                       |
+| **5. "Liquid Neon" UX**            | React Native 0.83 + NativeWind v4   | **Elite 120fps Experience:** A premium dark-mode Bento Box UI featuring hardware-accelerated GlassCards and Reanimated transitions.                     |
 
 ---
 
 ## 🗺️ The "Ironclad" Pipeline Architecture
 
-This diagram illustrates the genius of the **Cost-Saving Waterfall**. If Layer 1 (Scraping) is successful, it completely bypasses the expensive Audio/Deepgram extraction layers, funneling straight to the AI for insight generation.
+This diagram illustrates the ci of the **Cost-Saving Waterfall**. If Layer 1 (Scraping) is successful, it completely bypasses the expensive Audio/Deepgram extraction layers, funneling straight to the AI for insight generation.
 
 ```mermaid
 sequenceDiagram
@@ -228,12 +228,12 @@ Using `hooks/queries/useRealtimeVideoStatus.ts`, the frontend subscribes to Supa
 
 | FEATURES                   | DETAILS                                                                   |
 | :------------------------- | :------------------------------------------------------------------------ |
-| **1. Multi-Language** | Auto-detects and transcribes 30+ languages with industry-leading accuracy |
-| **2. Real-time Feedback** | Watch pipeline metrics advance live as your media processes               |
-| **3. Premium Exports** | Export instantly to Markdown, SRT, VTT, JSON, or Plain                    |
+| **1. Multi-Language**      | Auto-detects and transcribes 30+ languages with industry-leading accuracy |
+| **2. Real-time Feedback**  | Watch pipeline metrics advance live as your media processes               |
+| **3. Premium Exports**     | Export instantly to Markdown, SRT, VTT, JSON, or Plain                    |
 | **4. Executive Summaries** | AI generates C-Suite level summaries formatted with rich                  |
-| **5. SEO Metadata** | Auto-extracts tags and suggested titles for content publishers            |
+| **5. SEO Metadata**        | Auto-extracts tags and suggested titles for content publishers            |
 | **6. Granular Timestamps** | Millisecond-precise segmentation mapped to the original audio             |
-| **7. Cross-Platform** | Engineered to extract audio from 10+ video hosting providers              |
+| **7. Cross-Platform**      | Engineered to extract audio from 10+ video hosting providers              |
 
 ---

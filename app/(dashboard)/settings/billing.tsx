@@ -1,6 +1,6 @@
 /**
  * app/(dashboard)/settings/billing.tsx
- * Sovereign NorthOS — Resource Allocation & Token Economy (ULTIMATE v16.0)
+ * NorthOS — Resource Allocation & Token Economy 
  * ══════════════════════════════════════════════════════════════════════════════
  * PROTOCOL:
  * 1. TRIPLE-FLEX ARCHITECTURE: SafetyView -> Keyboard -> Scroll flex mapping.

@@ -1,6 +1,6 @@
 /**
  * app/(dashboard)/settings/index.tsx
- * Sovereign NorthOS Settings Dashboard
+ * Lingua NorthOS Settings Dashboard
  */
 
 import React, { useEffect, useMemo } from 'react';

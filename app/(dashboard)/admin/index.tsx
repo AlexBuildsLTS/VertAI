@@ -1,6 +1,6 @@
 /**
  * app/(dashboard)/admin/index.tsx
- * Sovereign NorthOS - Enterprise ADMIN Command Center
+ * NorthOS - Enterprise ADMIN Command Center
  * ----------------------------------------------------------------------------
  * PROTOCOL:
  * 1. REAL-TIME SYNCHRONIZATION: Full subscription to Profiles, Videos, and Logs.

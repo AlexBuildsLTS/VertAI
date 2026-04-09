@@ -25,7 +25,7 @@ export function parseVideoUrl(url: string): ParsedVideo {
 
   const cleanUrl = url.trim();
 
-  // ─── 1. YOUTUBE (The Ultimate Regex) ──────────────────────────────────────
+  // ─── 1. YOUTUBE ( Regex ) ──────────────────────────────────────
   // Matches:
   // - youtube.com/watch?v=ID
   // - youtu.be/ID

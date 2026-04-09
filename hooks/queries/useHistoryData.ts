@@ -1,6 +1,6 @@
 /**
  * hooks/queries/useHistoryData.ts
- * Sovereign Archive Fetcher
+ * NorthOS Archive Fetcher
  * ----------------------------------------------------------------------------
  * Fetches the complete list of video processing history for the current user.
  * Strictly typed against the Supabase Database schema.

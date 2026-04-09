@@ -201,10 +201,10 @@ export const useVideoStore = create<VideoState>((set, get) => ({
         if (clientTranscript) {
           recordEvent('FAST_PATH_CAPTIONS', 'success', `Secured verbatim transcript natively.`);
         } else {
-          recordEvent('FAST_PATH_CAPTIONS', 'warn', 'Native captions unavailable. Escalating to Sovereign Edge.');
+          recordEvent('FAST_PATH_CAPTIONS', 'warn', 'Native captions unavailable. Escalating to Verbum Edge.');
         }
       } catch (e) {
-        recordEvent('FAST_PATH_FAIL', 'warn', 'Proxy timed out. Seamlessly escalating to Sovereign Edge.');
+        recordEvent('FAST_PATH_FAIL', 'warn', 'Proxy timed out. Seamlessly escalating to Verbum Edge.');
       }
 
       // ─── EDGE DELEGATION ───

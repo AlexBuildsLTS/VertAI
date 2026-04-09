@@ -1,6 +1,6 @@
 /**
  * components/ui/ProfileDropdown.tsx
- * Sovereign NorthOS — User Context & Navigation Node
+ * Verbum NorthOS — User Context & Navigation Node
  * ══════════════════════════════════════════════════════════════════════════════
  * PROTOCOL:
  * 1. COMPILER SAFETY: Uses native React Native shadow props to bypass NativeWind bugs.
@@ -260,7 +260,6 @@ export const ProfileDropdown = () => {
               >
                 SIGN OUT
               </Text>
-              
             </TouchableOpacity>
           </View>
         </View>

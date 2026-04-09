@@ -1,6 +1,6 @@
 /**
  * app/(dashboard)/video/[id].tsx
- * Master Intelligence Dossier - Sovereign Monolithic Layout
+ * Master Intelligence Dossier - NorthOS Monolithic Layout
  * ══════════════════════════════════════════════════════════════════════════════
  * ARCHITECTURE & USER DIRECTIVES (ENDGAME VERSION):
  * 1. AMBIENT ENGINE: Imported the breathing gradient animation from Dashboard.

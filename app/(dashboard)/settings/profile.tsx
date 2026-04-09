@@ -21,6 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowBigLeftDash,
+  ArrowBigUpDash,
   User,
   Mail,
   Sparkles,
@@ -29,6 +30,9 @@ import {
   Globe,
   Pencil,
   RotateCcw,
+  Upload,
+  Check,
+  X,
 } from 'lucide-react-native';
 
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -418,14 +422,18 @@ export default function ProfileSettingsScreen() {
                     disabled={isUploading}
                     className="items-center flex-1 py-4 border bg-white/5 border-white/10 rounded-2xl"
                   >
-                    <Text className="text-white/60 text-[10px] font-black uppercase tracking-[3px]">
-                      {isUploading ? 'Transferring...' : 'AVATAR'}
-                    </Text>
+                  {isUploading ? (
+  <Text className="text-white/60 text-[10px] font-black uppercase tracking-[3px]">
+    Transferring...
+  </Text>
+) : (
+  <Upload size={16} color="rgba(9, 186, 112, 0.6)" />
+)} 
                   </TouchableOpacity>
 
                   {avatarUrl && (
                     <TouchableOpacity
-                      onPress={() => setAvatarUrl('')}
+                      onPress={() => setAvatarUrl('Upload')}
                       className="items-center justify-center w-16 border bg-neon-pink/10 border-neon-pink/20 rounded-2xl"
                     >
                       <RotateCcw size={20} color="#FF007F" />

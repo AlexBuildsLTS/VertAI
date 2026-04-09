@@ -1,6 +1,6 @@
 /**
  * components/domain/TranscriptViewer.tsx
- * Sovereign Interactive Intelligence Viewer
+ * NorthOS Interactive Intelligence Viewer
  * ----------------------------------------------------------------------------
  * FEATURES:
  * 1. SIDE-BY-SIDE ARCHITECTURE: Timeline and Raw Text are displayed simultaneously.

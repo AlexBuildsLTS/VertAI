@@ -57,7 +57,7 @@ export function sanitizeForDb(text: string | null | undefined): string {
 }
 
 /**
- * Sovereign YouTube Identifier Extraction Engine.
+ * Verbum YouTube Identifier Extraction Engine.
  * Supports standard, shortened, shorts, live, and embed URLs.
  */
 export function extractYouTubeId(url: string | null | undefined): string | null {

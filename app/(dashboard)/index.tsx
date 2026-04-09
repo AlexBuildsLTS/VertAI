@@ -1,6 +1,6 @@
 /**
  * app/(dashboard)/index.tsx
- * Sovereign Engine Dashboard
+ * NorthOS Engine Dashboard
  * ----------------------------------------------------------------------------
  * FEATURES:
  * 1. NATIVE SVG: Bypasses Metro bundler crashes using react-native-svg.
@@ -27,14 +27,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useVideoStore } from '../../store/useVideoStore';
 import { useProcessVideo } from '../../hooks/mutations/useProcessVideo';
 import { useVideoData } from '../../hooks/queries/useVideoData';
-
-// UI Components
+import { Button } from '../../components/ui/Button';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Input } from '../../components/ui/Input';
-import { Button } from '../../components/ui/Button';
+
+// Animations
 import { FadeIn } from '../../components/animations/FadeIn';
 import { ProcessingLoader } from '../../components/ui/ProcessingLoader';
 import { cn } from '../../lib/utils';
+
 
 // Native SVG & Animation
 import Svg, { Rect, Path, Polygon } from 'react-native-svg';
@@ -147,7 +148,15 @@ const AnimatedConverter = () => {
 // ══════════════════════════════════════════════════════════════════════════════
 // MODULE 1: AMBIENT BACKGROUND ENGINE (Restored 3-Color Glow & Fixed Edges)
 // ══════════════════════════════════════════════════════════════════════════════
-const AmbientGradient = ({ delay = 0, color = '#3B82F6', size, top, left, right, bottom }: any) => {
+const AmbientGradient = ({
+  delay = 0,
+  color = '#3B82F6',
+  size,
+  top,
+  left,
+  right,
+  bottom,
+}: any) => {
   const pulse = useSharedValue(0);
   const { width, height } = Dimensions.get('window');
 
@@ -195,8 +204,6 @@ const AmbientEngine = React.memo(() => (
     <AmbientGradient delay={10000} color="#2003fc" bottom={-150} left={-140} />
   </>
 ));
-
-   
 
 interface PipelineStatus {
   text: string;
@@ -558,7 +565,7 @@ export default function DashboardScreen() {
                         {isDropdownOpen && (
                           <View className="absolute w-full mt-2 overflow-hidden border shadow-2xl rounded-xl border-white/30 bg-black/30 backdrop-blur-xl top-full">
                             <ScrollView
-                              style={{ maxHeight: 200 }}
+                              style={{ maxHeight: 300 }}
                               nestedScrollEnabled
                             >
                               {OUTPUT_LANGUAGES.map((lang) => {

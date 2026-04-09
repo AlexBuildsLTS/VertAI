@@ -1,6 +1,6 @@
 /**
  * app/(auth)/sign-in.tsx
- * Unified Authentication Screen
+ * Sovereign NorthOS - Enterprise Authentication Protocol
  */
 
 import React, { useState, memo, useCallback, useEffect } from 'react';
@@ -16,6 +16,7 @@ import {
   StyleSheet,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -31,10 +32,11 @@ import {
   Shield,
   Zap,
   Brain,
-  Globe,
   Github,
   Twitter,
   Youtube,
+  Fingerprint,
+  UserX,
 } from 'lucide-react-native';
 import Animated, {
   FadeInDown,
@@ -47,8 +49,7 @@ import Animated, {
   withTiming,
   interpolate,
   withDelay,
-  FadeInUp,
-  FadeOutDown,
+  ZoomIn,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { cn } from '../../lib/utils';
@@ -67,34 +68,47 @@ type AuthMode = 'sign-in' | 'sign-up';
 const BENTO_ITEMS = [
   {
     icon: Zap,
-    title: 'Lightning Engine',
-    desc: 'Process massive media payloads with sub-second latency.',
+    title: 'Lightning Extraction',
+    desc: 'Deepgram Nova-2 STT handles massive audio streams in sub-30s.',
     color: '#00F0FF',
   },
   {
     icon: Brain,
-    title: 'Neural Analysis',
-    desc: 'Semantic extraction via Anthropic Claude models.',
+    title: 'Executive AI Engine',
+    desc: 'Gemini 3.1 Flash-Lite generates SEO, summaries, and chapters.',
     color: '#8A2BE2',
   },
   {
-    icon: Globe,
-    title: 'Global Nodes',
-    desc: 'Access your transcripts from any authenticated endpoint.',
+    icon: Shield,
+    title: 'Anti-Block Architecture',
+    desc: 'Multi-proxy routing to ensure unstoppable reliability.',
     color: '#00F0FF',
   },
 ];
 
 function mapAuthError(errorMessage: string): string {
-  if (errorMessage.includes('Invalid login credentials'))
-    return 'Incorrect email or password.';
-  if (errorMessage.includes('User already registered'))
-    return 'An account with this email already exists.';
-  if (errorMessage.includes('Password should be at least'))
-    return 'Password does not meet security requirements.';
+  const lowMsg = errorMessage.toLowerCase();
+  if (lowMsg.includes('invalid login credentials'))
+    return 'Identity verification failed. Please check your credentials.';
+  if (
+    lowMsg.includes('user already registered') ||
+    lowMsg.includes('already exists')
+  )
+    return 'This identity protocol is already active. Please sign in instead.';
+  if (lowMsg.includes('password should be at least'))
+    return 'Security key strength insufficient. Minimum 8 characters required.';
+  if (lowMsg.includes('network') || lowMsg.includes('fetch'))
+    return 'Neural link failed. Check your network connection.';
+  if (lowMsg.includes('rate limit'))
+    return 'Traffic surge detected. Please wait before retrying.';
+  if (lowMsg.includes('email not confirmed'))
+    return 'Account pending verification. Please check your inbox.';
   return errorMessage;
 }
 
+// ----------------------------------------------------------------------------
+// [MODULE: AMBIENT UX ENGINE]
+// ----------------------------------------------------------------------------
 const NeuralOrb = ({ delay = 0, color = '#00F0FF' }) => {
   const pulse = useSharedValue(0);
   const { width, height } = Dimensions.get('window');
@@ -125,7 +139,7 @@ const NeuralOrb = ({ delay = 0, color = '#00F0FF' }) => {
           height: 600,
           backgroundColor: color,
           borderRadius: 300,
-          ...(Platform.OS === 'web' ? { filter: 'blur(120px)' as any } : {}),
+          ...(Platform.OS === 'web' ? { filter: 'blur(120px)' } : {}),
         },
       ]}
     />
@@ -159,18 +173,29 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isAnonLoading, setIsAnonLoading] = useState(false);
+
+  const [successState, setSuccessState] = useState<'none' | 'login' | 'signup'>(
+    'none',
+  );
   const [message, setMessage] = useState<{
     type: 'error' | 'success';
     text: string;
   } | null>(null);
 
+  // ----------------------------------------------------------------------------
+  // [MODULE: CORE AUTHENTICATION DISPATCHER]
+  // ----------------------------------------------------------------------------
   const handleAction = useCallback(async () => {
+    if (__DEV__) console.log(`[Sign-In] Action triggered: ${authMode}`);
     setMessage(null);
     const trimmedEmail = email.trim();
 
     if (!AuthValidator.isValidEmail(trimmedEmail)) {
+      if (__DEV__) console.warn('[Sign-In] Invalid email entered');
       return setMessage({
         type: 'error',
         text: 'Valid email address required.',
@@ -180,48 +205,77 @@ export default function SignInScreen() {
     setLoading(true);
 
     if (authMode === 'sign-in') {
+      if (__DEV__) console.log('[Sign-In] Calling signInWithPassword');
       const { error } = await signInWithPassword(trimmedEmail, password);
       if (error) {
+        if (__DEV__) console.log('[Sign-In] Sign-in failed:', error);
         setMessage({ type: 'error', text: mapAuthError(error) });
+        setLoading(false);
       } else {
-        router.replace('/(dashboard)');
+        if (__DEV__)
+          console.log('[Sign-In] Sign-in successful, redirecting...');
+        setSuccessState('login');
+        setTimeout(() => {
+          router.replace('/(dashboard)');
+        }, 1500);
       }
     } else {
-      if (!fullName.trim()) {
-        setLoading(false);
-        return setMessage({ type: 'error', text: 'Full name is required.' });
-      }
-      if (password.length < 8) {
-        setLoading(false);
-        return setMessage({
-          type: 'error',
-          text: 'Password must be at least 8 characters.',
-        });
-      }
-      if (password !== confirmPassword) {
-        setLoading(false);
-        return setMessage({ type: 'error', text: 'Passwords do not match.' });
-      }
-      if (!agreedToTerms) {
+      if (__DEV__) console.log('[Sign-In] Validating sign-up fields');
+      if (
+        !fullName.trim() ||
+        password.length < 8 ||
+        password !== confirmPassword ||
+        !agreedToTerms
+      ) {
+        if (__DEV__) console.warn('[Sign-In] Sign-up validation failed');
         setLoading(false);
         return setMessage({
           type: 'error',
-          text: 'You must accept the Terms of Service.',
+          text: 'Please complete all required fields.',
         });
       }
 
+      if (__DEV__) console.log('[Sign-In] Calling signUp');
       const { error } = await signUp(trimmedEmail, password, fullName.trim());
+
       if (error) {
+        if (__DEV__) console.error('[Sign-In] Sign-up failed:', error);
         setMessage({ type: 'error', text: mapAuthError(error) });
+        setLoading(false);
       } else {
-        setMessage({
-          type: 'success',
-          text: 'Account created. Check your email to verify.',
-        });
-        setAuthMode('sign-in');
+        if (__DEV__) console.log('[Sign-In] Sign-up successful');
+
+        // We ALWAYS show the signup success state first, even if auto-confirmed.
+        // This ensures the user sees the "Identity Initialized" message.
+        setSuccessState('signup');
+
+        setTimeout(async () => {
+          // Check if user was automatically signed in (depends on Supabase config)
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+
+          if (session) {
+            if (__DEV__)
+              console.log('[Sign-In] User auto-signed in after sign-up');
+            setSuccessState('login');
+            setTimeout(() => {
+              router.replace('/(dashboard)');
+            }, 1500);
+          } else {
+            setSuccessState('none');
+            setAuthMode('sign-in');
+            setPassword('');
+            setConfirmPassword('');
+            setMessage({
+              type: 'success',
+              text: 'Account created. Please check your email to verify.',
+            });
+            setLoading(false);
+          }
+        }, 2000);
       }
     }
-    setLoading(false);
   }, [
     authMode,
     fullName,
@@ -245,9 +299,7 @@ export default function SignInScreen() {
         provider: 'google',
         options: { redirectTo: redirectUri, skipBrowserRedirect: true },
       });
-
       if (error) throw error;
-
       if (data?.url) {
         const result = await WebBrowser.openAuthSessionAsync(
           data.url,
@@ -269,16 +321,41 @@ export default function SignInScreen() {
     } catch (e: any) {
       setMessage({
         type: 'error',
-        text: mapAuthError(e.message || 'Google Sign In failed'),
+        text: mapAuthError(e.message || 'OAuth execution failed.'),
       });
     } finally {
       setIsGoogleLoading(false);
     }
   };
 
+  const handleAnonymousSignIn = async () => {
+    setIsAnonLoading(true);
+    setMessage(null);
+    try {
+      const { error } = await supabase.auth.signInAnonymously();
+      if (error) throw error;
+      setSuccessState('login');
+      setTimeout(() => {
+        router.replace('/(dashboard)');
+      }, 1500);
+    } catch (e: any) {
+      setMessage({
+        type: 'error',
+        text: mapAuthError(e.message || 'Anonymous sign-in failed.'),
+      });
+      setIsAnonLoading(false);
+    }
+  };
+
   return (
     <View className="flex-1 bg-[#020205]">
-      <View className="absolute inset-0 overflow-hidden" pointerEvents="none">
+      {/* 🔴 THE FIX: pointerEvents passed via style and zIndex pushed back to prevent invisible touch shield on Android */}
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          { pointerEvents: 'none', zIndex: -1, overflow: 'hidden' },
+        ]}
+      >
         <NeuralOrb delay={0} color="#00F0FF" />
         <NeuralOrb delay={2500} color="#8A2BE2" />
       </View>
@@ -319,9 +396,14 @@ export default function SignInScreen() {
                     setAgreedToTerms={setAgreedToTerms}
                     loading={loading}
                     isGoogleLoading={isGoogleLoading}
+                    isAnonLoading={isAnonLoading}
                     onAction={handleAction}
                     onGoogleAction={handleGoogleSignIn}
+                    onAnonAction={handleAnonymousSignIn}
                     message={message}
+                    setMessage={setMessage}
+                    successState={successState}
+                    router={router}
                   />
                   <SecurityFooter />
                 </ScrollView>
@@ -359,9 +441,14 @@ export default function SignInScreen() {
                   setAgreedToTerms={setAgreedToTerms}
                   loading={loading}
                   isGoogleLoading={isGoogleLoading}
+                  isAnonLoading={isAnonLoading}
                   onAction={handleAction}
                   onGoogleAction={handleGoogleSignIn}
+                  onAnonAction={handleAnonymousSignIn}
                   message={message}
+                  setMessage={setMessage}
+                  successState={successState}
+                  router={router}
                 />
                 <SecurityFooter />
               </View>
@@ -389,7 +476,7 @@ BrandHeader.displayName = 'BrandHeader';
 
 const FormField = ({ label, icon: Icon, children }: any) => (
   <View style={{ marginBottom: 16 }}>
-    <Text className="text-neon-cyan font-black text-[10px] tracking-widest uppercase mb-2 ml-1">
+    <Text className="text-[#00F0FF] font-black text-[10px] tracking-widest uppercase mb-2 ml-1">
       {label}
     </Text>
     <View className="bg-white/[0.02] border border-white/10 rounded-2xl h-16 flex-row items-center px-4">
@@ -417,9 +504,14 @@ const AuthForm = memo(
     setAgreedToTerms,
     loading,
     isGoogleLoading,
+    isAnonLoading,
     onAction,
     onGoogleAction,
+    onAnonAction,
     message,
+    setMessage,
+    successState,
+    router,
   }: any) => {
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
@@ -428,335 +520,442 @@ const AuthForm = memo(
     const passwordsMatch =
       confirmPassword.length > 0 && password === confirmPassword;
 
-    const SlideIn = FadeInRight.springify()
-      .damping(18)
-      .mass(0.8)
-      .stiffness(150);
-    const SlideOut = FadeOutUp.duration(150);
+    const SlideIn = FadeInRight.springify().damping(20).mass(1).stiffness(140);
+    const SlideOut = FadeOutUp.duration(200);
 
     return (
-      <View
+      <Animated.View
+        layout={Layout.springify().damping(20).stiffness(150)}
         style={{
           width: '100%',
           padding: 24,
           borderWidth: 1,
           borderColor: 'rgba(255,255,255,0.05)',
-          borderRadius: 16,
+          borderRadius: 18,
           backgroundColor: 'rgba(0,0,0,0.4)',
           overflow: 'hidden',
         }}
       >
-        <Animated.View
-          layout={Layout.springify().mass(0.6).damping(16).stiffness(120)}
-        >
-          {/* THIS IS THE FIX: The two buttons are wrapped in flex: 1 containers so they can never be squished */}
-          <View
-            style={{
-              flexDirection: 'row',
-              backgroundColor: 'rgba(255,255,255,0.03)',
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.1)',
-              borderRadius: 16,
-              padding: 4,
-              marginBottom: 20,
-            }}
+        {successState !== 'none' ? (
+          <Animated.View
+            layout={Layout.springify().damping(18).stiffness(120)}
+            entering={SlideIn}
+            exiting={SlideOut.springify().mass(0.6).damping(16).stiffness(120)}
+            style={{ alignItems: 'center', paddingVertical: 40 }}
           >
-            <View style={{ flex: 1 }}>
-              <TouchableOpacity
-                onPress={() => {
-                  setAuthMode('sign-in');
-                  setConfirmPassword('');
-                  setFullName('');
-                }}
-                activeOpacity={0.8}
-                style={{
-                  width: '100%',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  paddingVertical: 12,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: !isSignUp
-                    ? 'rgba(0, 240, 255, 0.3)'
-                    : 'transparent',
-                  backgroundColor: !isSignUp
-                    ? 'rgba(0, 240, 255, 0.1)'
-                    : 'transparent',
-                }}
-              >
-                <Text
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  style={{
-                    fontSize: 10,
-                    fontWeight: '900',
-                    textTransform: 'uppercase',
-                    letterSpacing: 2,
-                    color: !isSignUp ? '#00F0FF' : 'rgba(255,255,255,0.4)',
-                  }}
-                >
-                  SIGN IN
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={{ flex: 1 }}>
-              <TouchableOpacity
-                onPress={() => setAuthMode('sign-up')}
-                activeOpacity={0.8}
-                style={{
-                  width: '100%',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  paddingVertical: 12,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: isSignUp
-                    ? 'rgba(0, 240, 255, 0.3)'
-                    : 'transparent',
-                  backgroundColor: isSignUp
-                    ? 'rgba(0, 240, 255, 0.1)'
-                    : 'transparent',
-                }}
-              >
-                <Text
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  style={{
-                    fontSize: 10,
-                    fontWeight: '900',
-                    textTransform: 'uppercase',
-                    letterSpacing: 2,
-                    color: isSignUp ? '#00F0FF' : 'rgba(255,255,255,0.4)',
-                  }}
-                >
-                  SIGN UP
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {isSignUp && (
-            <Animated.View entering={SlideIn} exiting={SlideOut}>
-              <FormField label="Full Name" icon={User}>
-                <TextInput
-                  className="flex-1 h-full ml-3 text-sm font-medium text-white outline-none"
-                  placeholder="John Doe"
-                  placeholderTextColor="#475569"
-                  value={fullName}
-                  onChangeText={setFullName}
-                  editable={!loading}
-                />
-              </FormField>
-            </Animated.View>
-          )}
-
-          {isSignUp && (
-            <Animated.View entering={SlideIn.delay(50)} exiting={SlideOut}>
-              <FormField label="Username" icon={AtSign}>
-                <TextInput
-                  className="flex-1 h-full ml-3 text-sm font-medium text-white outline-none"
-                  placeholder="Username"
-                  placeholderTextColor="#475569"
-                  value={username}
-                  onChangeText={setUsername}
-                  autoCapitalize="none"
-                  editable={!loading}
-                />
-              </FormField>
-            </Animated.View>
-          )}
-
-          <FormField label="Email" icon={Mail}>
-            <TextInput
-              className="flex-1 h-full ml-3 text-sm font-medium text-white outline-none"
-              placeholder="Enter Your Address"
-              placeholderTextColor="#475569"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!loading}
-            />
-          </FormField>
-
-          <View style={{ marginBottom: 16 }}>
-            <Text className="text-neon-cyan font-black text-[10px] tracking-widest uppercase mb-2 ml-1">
-              PASSWORD
+            <CheckCircle2 size={80} color="#32FF00" />
+            <Text className="text-[#32FF00] text-lg font-black uppercase tracking-widest mt-6 text-center">
+              {successState === 'login'
+                ? 'Access Granted'
+                : 'Identity Initialized'}
             </Text>
-            <View className="bg-white/[0.02] border border-white/10 rounded-2xl h-16 flex-row items-center px-4">
-              <Lock size={18} color="#A1A1AA" />
+
+            <Text className="text-white/50 text-[10px] uppercase tracking-widest mt-2 text-center">
+              {successState === 'login'
+                ? 'Synchronizing workspace...'
+                : 'Preparing secure connection...'}
+            </Text>
+
+            <View className="items-center justify-center mt-12">
+              <Animated.View
+                entering={ZoomIn.delay(200)}
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
+                  borderWidth: 2,
+                  borderColor: 'rgba(50, 255, 0, 0.2)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <ActivityIndicator color="#32FF00" size="small" />
+              </Animated.View>
+            </View>
+          </Animated.View>
+        ) : (
+          <>
+            {/* TAB CONTROLLER */}
+            <View
+              style={{
+                flexDirection: 'row',
+                backgroundColor: 'rgba(255,255,255,0.03)',
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.1)',
+                borderRadius: 16,
+                padding: 4,
+                marginBottom: 24,
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setAuthMode('sign-in');
+                    setConfirmPassword('');
+                    setFullName('');
+                    if (setMessage) setMessage(null);
+                  }}
+                  activeOpacity={0.8}
+                  style={{
+                    width: '100%',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: !isSignUp
+                      ? 'rgba(0, 240, 255, 0.3)'
+                      : 'transparent',
+                    backgroundColor: !isSignUp
+                      ? 'rgba(0, 240, 255, 0.1)'
+                      : 'transparent',
+                  }}
+                >
+                  <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    style={{
+                      fontSize: 10,
+                      fontWeight: '900',
+                      textTransform: 'uppercase',
+                      letterSpacing: 2,
+                      color: !isSignUp ? '#00F0FF' : 'rgba(255,255,255,0.4)',
+                    }}
+                  >
+                    SIGN IN
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ flex: 1 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setAuthMode('sign-up');
+                    if (setMessage) setMessage(null);
+                  }}
+                  activeOpacity={0.8}
+                  style={{
+                    width: '100%',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: isSignUp
+                      ? 'rgba(0, 240, 255, 0.3)'
+                      : 'transparent',
+                    backgroundColor: isSignUp
+                      ? 'rgba(0, 240, 255, 0.1)'
+                      : 'transparent',
+                  }}
+                >
+                  <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    style={{
+                      fontSize: 10,
+                      fontWeight: '900',
+                      textTransform: 'uppercase',
+                      letterSpacing: 2,
+                      color: isSignUp ? '#00F0FF' : 'rgba(255,255,255,0.4)',
+                    }}
+                  >
+                    SIGN UP
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {isSignUp && (
+              <Animated.View entering={SlideIn} exiting={SlideOut}>
+                <FormField label="Full Name" icon={User}>
+                  <TextInput
+                    className="flex-1 h-full ml-3 text-sm font-medium text-white outline-none"
+                    placeholder="John Doe"
+                    placeholderTextColor="#475569"
+                    value={fullName}
+                    onChangeText={setFullName}
+                    editable={!loading}
+                  />
+                </FormField>
+              </Animated.View>
+            )}
+
+            {isSignUp && (
+              <Animated.View entering={SlideIn.delay(50)} exiting={SlideOut}>
+                <FormField label="Username" icon={AtSign}>
+                  <TextInput
+                    className="flex-1 h-full ml-3 text-sm font-medium text-white outline-none"
+                    placeholder="Username"
+                    placeholderTextColor="#475569"
+                    value={username}
+                    onChangeText={setUsername}
+                    autoCapitalize="none"
+                    editable={!loading}
+                    autoCorrect={false}
+                  />
+                </FormField>
+              </Animated.View>
+            )}
+
+            <FormField label="Email" icon={Mail}>
               <TextInput
                 className="flex-1 h-full ml-3 text-sm font-medium text-white outline-none"
-                placeholder="Min. 8 characters"
+                placeholder="Enter Your Address"
                 placeholderTextColor="#475569"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
                 editable={!loading}
+                autoCorrect={false}
               />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-              >
-                {showPassword ? (
-                  <EyeOff size={18} color="#A1A1AA" />
-                ) : (
-                  <Eye size={18} color="#A1A1AA" />
-                )}
-              </TouchableOpacity>
+            </FormField>
+
+            {/* ----------------------------------------------------------------------------
+                  [MODULE: PASSWORD CONTAINER]
+                  ---------------------------------------------------------------------------- */}
+            <View style={{ marginBottom: isSignUp ? 12 : 0 }}>
+              <Text className="text-[#00F0FF] font-black text-[10px] tracking-widest uppercase mb-2 ml-1">
+                PASSWORD
+              </Text>
+
+              <View className="bg-white/[0.02] border border-white/10 rounded-2xl h-16 flex-row items-center px-4">
+                <Lock size={18} color="#A1A1AA" />
+                <TextInput
+                  className="flex-1 h-full ml-3 text-sm font-medium text-white outline-none"
+                  placeholder="Min. 8 characters"
+                  placeholderTextColor="#475569"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  editable={!loading}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                >
+                  {showPassword ? (
+                    <EyeOff size={18} color="#A1A1AA" />
+                  ) : (
+                    <Eye size={18} color="#A1A1AA" />
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* Strength Meter */}
+              {isSignUp && password.length > 0 && (
+                <Animated.View
+                  entering={FadeInDown}
+                  exiting={SlideOut}
+                  className="px-1 mt-4"
+                >
+                  <View className="flex-row h-1 gap-1 mb-2">
+                    {[1, 2, 3, 4, 5].map((level) => (
+                      <View
+                        key={level}
+                        style={{
+                          flex: 1,
+                          borderRadius: 99,
+                          backgroundColor:
+                            strength.score >= level
+                              ? strength.color
+                              : 'rgba(255,255,255,0.1)',
+                        }}
+                      />
+                    ))}
+                  </View>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-white/20 text-[8px] font-mono uppercase tracking-widest">
+                      8+ chars, uppercase, number, symbol
+                    </Text>
+                    <Text
+                      style={{ color: strength.color }}
+                      className="text-[8px] font-black uppercase tracking-widest"
+                    >
+                      {strength.label}
+                    </Text>
+                  </View>
+                </Animated.View>
+              )}
             </View>
 
-            {isSignUp && password.length > 0 && (
+            {/* ----------------------------------------------------------------------------
+                  [MODULE: FORGOT PASSWORD LINK]
+                  Cleanly placed entirely outside the input box, right-aligned, with standard mt-3 spacing.
+                  ---------------------------------------------------------------------------- */}
+            {!isSignUp && (
               <Animated.View
-                entering={FadeInDown}
-                exiting={SlideOut}
-                className="px-1 mt-3"
+                entering={FadeInDown.duration(300)}
+                style={{
+                  alignItems: 'flex-end',
+                  marginTop: 12,
+                  marginBottom: 12,
+                }}
               >
-                <View className="flex-row h-1 gap-1 mb-2">
-                  {[1, 2, 3, 4, 5].map((level) => (
-                    <View
-                      key={level}
-                      style={{
-                        flex: 1,
-                        borderRadius: 99,
-                        backgroundColor:
-                          strength.score >= level
-                            ? strength.color
-                            : 'rgba(255,255,255,0.1)',
-                      }}
-                    />
-                  ))}
-                </View>
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-white/20 text-[8px] font-mono uppercase tracking-widest">
-                    8+ chars, uppercase, number, symbol
+                <TouchableOpacity
+                  onPress={() => router.push('/(auth)/forgot-password' as any)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text className="text-[#00F0FF] text-[11px] font-bold tracking-widest uppercase hover:text-white transition-colors">
+                    Forgot Password?
                   </Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+
+            {isSignUp && (
+              <Animated.View entering={SlideIn.delay(100)} exiting={SlideOut}>
+                <Text className="text-[#00F0FF] font-black text-[10px] tracking-widest uppercase mb-2 ml-1 mt-2">
+                  Confirm Security Key
+                </Text>
+                <View
+                  className={cn(
+                    'border rounded-2xl h-16 flex-row items-center px-4',
+                    confirmPassword.length > 0 && !passwordsMatch
+                      ? 'border-rose-500/50'
+                      : passwordsMatch
+                        ? 'border-[#32FF00]/50'
+                        : 'border-white/10',
+                  )}
+                  style={{ backgroundColor: 'rgba(255,255,255,0.02)' }}
+                >
+                  <Fingerprint size={18} color="#A1A1AA" />
+                  <TextInput
+                    className="flex-1 h-full ml-3 text-sm font-medium text-white outline-none"
+                    placeholder="Re-enter Password"
+                    placeholderTextColor="#475569"
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    secureTextEntry={!showConfirm}
+                    editable={!loading}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  onPress={() => setAgreedToTerms(!agreedToTerms)}
+                  className="flex-row items-start gap-3 mt-4 mb-2"
+                  activeOpacity={0.7}
+                >
+                  {agreedToTerms ? (
+                    <CheckCircle2 size={20} color="#00F0FF" />
+                  ) : (
+                    <Circle size={20} color="rgba(255,255,255,0.2)" />
+                  )}
+                  <Text className="flex-1 text-white/40 text-[11px] leading-5">
+                    I agree to the{' '}
+                    <Text className="font-bold text-[#00F0FF]">
+                      Terms of Service
+                    </Text>{' '}
+                    and{' '}
+                    <Text className="font-bold text-[#00F0FF]">
+                      Privacy Policy
+                    </Text>
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+
+            {message && (
+              <Animated.View
+                entering={FadeInDown.springify()}
+                exiting={FadeOutUp}
+                className={cn(
+                  'p-5 border-2 rounded-2xl mt-6 flex-row items-center gap-4',
+                  message.type === 'error'
+                    ? 'bg-rose-500/10 border-rose-500/20'
+                    : 'bg-emerald-500/10 border-emerald-500/20',
+                )}
+              >
+                <View
+                  className={cn(
+                    'w-8 h-8 rounded-full items-center justify-center',
+                    message.type === 'error'
+                      ? 'bg-rose-500/20'
+                      : 'bg-emerald-500/20',
+                  )}
+                >
+                  {message.type === 'error' ? (
+                    <UserX size={16} color="#F43F5E" />
+                  ) : (
+                    <CheckCircle2 size={16} color="#10B981" />
+                  )}
+                </View>
+                <View className="flex-1">
                   <Text
-                    style={{ color: strength.color }}
-                    className="text-[8px] font-black uppercase tracking-widest"
+                    className={cn(
+                      'font-black text-[10px] uppercase tracking-[2px]',
+                      message.type === 'error'
+                        ? 'text-rose-500'
+                        : 'text-emerald-500',
+                    )}
                   >
-                    {strength.label}
+                    {message.type === 'error'
+                      ? 'Protocol Breach'
+                      : 'Verification Sent'}
+                  </Text>
+                  <Text className="text-white/70 text-[11px] font-medium leading-4 mt-1">
+                    {message.text}
                   </Text>
                 </View>
               </Animated.View>
             )}
-          </View>
 
-          {isSignUp && (
-            <Animated.View entering={SlideIn.delay(100)} exiting={SlideOut}>
-              <Text className="text-neon-cyan font-black text-[10px] tracking-widest uppercase mb-2 ml-1">
-                Confirm Security Key
-              </Text>
-              <View
-                className={cn(
-                  'border rounded-2xl h-16 flex-row items-center px-4',
-                  confirmPassword.length > 0 && !passwordsMatch
-                    ? 'border-neon-pink/50'
-                    : passwordsMatch
-                      ? 'border-neon-lime/50'
-                      : 'border-white/10',
-                )}
-                style={{ backgroundColor: 'rgba(255,255,255,0.02)' }}
-              >
-                <Shield size={18} color="#A1A1AA" />
-                <TextInput
-                  className="flex-1 h-full ml-3 text-sm font-medium text-white outline-none"
-                  placeholder="Re-enter Password"
-                  placeholderTextColor="#475569"
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry={!showConfirm}
-                  editable={!loading}
-                />
-              </View>
-
-              <TouchableOpacity
-                onPress={() => setAgreedToTerms(!agreedToTerms)}
-                className="flex-row items-start gap-3 mt-4 mb-2"
-                activeOpacity={0.7}
-              >
-                {agreedToTerms ? (
-                  <CheckCircle2 size={20} color="#00F0FF" />
-                ) : (
-                  <Circle size={20} color="rgba(255,255,255,0.2)" />
-                )}
-                <Text className="flex-1 text-white/40 text-[11px] leading-5">
-                  I agree to the{' '}
-                  <Text className="font-bold text-neon-cyan">
-                    Terms of Service
-                  </Text>{' '}
-                  and{' '}
-                  <Text className="font-bold text-neon-cyan">
-                    Privacy Policy
-                  </Text>
-                </Text>
-              </TouchableOpacity>
-            </Animated.View>
-          )}
-
-          {message && (
-            <Animated.View
-              entering={FadeInDown}
-              exiting={SlideOut}
-              className={cn(
-                'p-4 border rounded-xl mt-2',
-                message.type === 'error'
-                  ? 'bg-neon-pink/10 border-neon-pink/30'
-                  : 'bg-neon-cyan/10 border-neon-cyan/30',
-              )}
-            >
-              <Text
-                className={cn(
-                  'text-center font-bold text-[10px] tracking-widest uppercase',
-                  message.type === 'error'
-                    ? 'text-neon-pink'
-                    : 'text-neon-cyan',
-                )}
-              >
-                {message.text}
-              </Text>
-            </Animated.View>
-          )}
-
-          <Button
-            onPress={onAction}
-            isLoading={loading}
-            title={
-              loading
-                ? 'PROCESSING...'
-                : isSignUp
-                  ? 'CREATE ACCOUNT'
-                  : 'SIGN IN'
-            }
-            className="py-5 mt-4 shadow-lg shadow-neon-cyan/20"
-          />
-
-          <View className="flex-row items-center my-6 opacity-30">
-            <View className="flex-1 h-[1px] bg-white" />
-            <Text className="px-4 text-[10px] font-bold text-white uppercase tracking-widest">
-              OR
-            </Text>
-            <View className="flex-1 h-[1px] bg-white" />
-          </View>
-
-          <TouchableOpacity
-            onPress={onGoogleAction}
-            disabled={isGoogleLoading || loading}
-            className="flex-row items-center justify-center py-4 transition-opacity bg-white rounded-xl active:opacity-80"
-          >
-            <Image
-              source={{
-                uri: 'https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg',
-              }}
-              style={{ width: 18, height: 18, marginRight: 10 }}
+            <Button
+              onPress={onAction}
+              isLoading={loading}
+              title={
+                loading
+                  ? 'PROCESSING...'
+                  : isSignUp
+                    ? 'CREATE ACCOUNT'
+                    : 'SIGN IN'
+              }
+              className="py-5 mt-4 border border-[#00F0FF]/20"
             />
-            <Text className="text-xs font-bold tracking-wider text-black">
-              {isGoogleLoading ? 'CONNECTING...' : 'CONTINUE WITH GOOGLE'}
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </View>
+
+            <View className="flex-row items-center my-6 opacity-30">
+              <View className="flex-1 h-[1px] bg-white" />
+              <Text className="px-4 text-[14px] font-bold text-white uppercase tracking-widest">
+                --
+              </Text>
+              <View className="flex-1 h-[1px] bg-white" />
+            </View>
+
+            <TouchableOpacity
+              onPress={onGoogleAction}
+              disabled={isGoogleLoading || loading || isAnonLoading}
+              activeOpacity={0.7}
+              className="flex-row items-center justify-center py-4 mb-3 transition-opacity bg-white border rounded-xl border-white/20"
+            >
+              <Image
+                source={{
+                  uri: 'https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg',
+                }}
+                style={{ width: 18, height: 18, marginRight: 10 }}
+              />
+              <Text className="text-xs font-bold tracking-widest text-black uppercase">
+                {isGoogleLoading ? 'Connecting...' : 'SIGN IN GOOGLE'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={onAnonAction}
+              disabled={isGoogleLoading || loading || isAnonLoading}
+              activeOpacity={0.7}
+              className="flex-row items-center justify-center py-4 transition-opacity bg-white/[0.05] border rounded-xl border-white/10"
+            >
+              <UserX size={18} color="#A1A1AA" style={{ marginRight: 10 }} />
+              <Text className="text-xs font-bold tracking-widest text-[#A1A1AA] uppercase">
+                {isAnonLoading ? 'Generating Session...' : 'GUEST SESSION'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </Animated.View>
     );
   },
 );
@@ -765,7 +964,7 @@ AuthForm.displayName = 'AuthForm';
 const SecurityFooter = memo(() => (
   <View className="flex-row items-center justify-center mt-10 opacity-40">
     <Text className="text-white/80 text-[9px] font-black tracking-[2px] uppercase">
-      End-to-End Encrypted Session
+      VIDEO & AUDIOURL TRANSCRIBER
     </Text>
   </View>
 ));
@@ -783,24 +982,7 @@ const MarketingContent = memo(({ isDesktop }: { isDesktop: boolean }) => {
       <Animated.View
         entering={FadeInRight.duration(1200).springify().delay(200)}
         style={{ marginBottom: 40 }}
-      >
-        <Text
-          className={cn(
-            'font-black text-white tracking-tighter uppercase',
-            isDesktop ? 'text-6xl leading-[60px]' : 'text-4xl leading-[42px]',
-          )}
-        >
-          Enterprise <Text className="text-neon-cyan">Scale</Text>
-        </Text>
-        <Text
-          className={cn(
-            'text-white/50 leading-loose mt-4',
-            isDesktop ? 'text-lg' : 'text-sm',
-          )}
-        >
-          Extract Any Videos Audio With The Latest AI
-        </Text>
-      </Animated.View>
+      ></Animated.View>
 
       <View className="flex-col gap-5 mt-4">
         {BENTO_ITEMS.map((item, index) => (
@@ -854,13 +1036,18 @@ const styles = StyleSheet.create({
     padding: 48,
     borderRightWidth: 1,
     borderRightColor: 'rgba(255,255,255,0.05)',
-    zIndex: 10,
     backgroundColor: 'rgba(2, 6, 23, 0.4)',
   },
   desktopScroll: { flex: 1 },
   desktopScrollContent: { padding: 80, paddingBottom: 150 },
   mobileScroll: { flex: 1 },
-  mobileScrollContent: { flexGrow: 1, paddingBottom: 100 },
+  mobileScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 100,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 500,
+  },
   mobilePane: { padding: 24, paddingTop: 40 },
   brandIcon: { width: 100, height: 100 },
 });

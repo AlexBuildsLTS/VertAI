@@ -1,6 +1,6 @@
 /**
  * app/(dashboard)/admin/_layout.tsx
- * Sovereign NorthOS - Admin Route Guard
+ * Verbum NorthOS - Admin Route Guard
  */
 import React from 'react';
 import { Redirect, Stack } from 'expo-router';

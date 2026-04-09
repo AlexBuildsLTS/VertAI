@@ -75,7 +75,10 @@ export default function RootLayout() {
 
   // 4. Trigger the fade out of the transparent SVG
   useEffect(() => {
-    if (Platform.OS === 'web') return; // Do not run animation on web
+    if (Platform.OS === 'web') {
+      setSplashFinished(true);
+      return;
+    }
 
     if (!isLoading) {
       // Let the SVG/GIF play for 1.5 seconds, then fade it out
@@ -92,7 +95,9 @@ export default function RootLayout() {
   }, [isLoading]);
 
   // Prevent rendering the actual UI tree until Auth is resolved
-  if (isLoading) {
+  // ON WEB: We don't show the custom splash overlay, so we just wait for auth
+  // ON NATIVE: We show the custom splash overlay while auth is loading AND until the animation finishes
+  if (isLoading && Platform.OS === 'web') {
     return <View style={{ flex: 1, backgroundColor: '#020205' }} />;
   }
 
@@ -134,7 +139,7 @@ export default function RootLayout() {
 
 const styles = StyleSheet.create({
   splashOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: '#020205',
     zIndex: 99999,
     alignItems: 'center',

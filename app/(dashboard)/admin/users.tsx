@@ -1,6 +1,7 @@
 /**
  * app/(dashboard)/admin/users.tsx
- * Sovereign NorthOS - User Management & Security Protocols (ULTIMATE v6.0)
+ * VerAI - User Management & Security Protocols
+ *  NorthOS
  * ----------------------------------------------------------------------------
  * FEATURES:
  * 1. AMBIENT ENGINE: Integrated custom #01111fbe background with breathing.
@@ -227,9 +228,14 @@ export default function AdminUsersScreen() {
     triggerHaptic('selection');
 
     try {
+      const updatePayload =
+        type === 'role'
+          ? { role: newValue as UserRole }
+          : { tier: newValue as UserTier };
+
       const { error } = await supabase
         .from('profiles')
-        .update({ [type]: newValue })
+        .update(updatePayload as any)
         .eq('id', selectedUser.id);
 
       if (error) throw error;
@@ -254,7 +260,7 @@ export default function AdminUsersScreen() {
       if (error) throw error;
       Alert.alert(
         'Tokens Granted',
-        `${amount} tokens added to ${selectedUser.email}`,
+        `${amount} tokens added to ${selectedUser.email}. New balance: ${newBalance}`,
       );
     } catch (e: any) {
       Alert.alert('Transaction Failed', e.message);
@@ -485,7 +491,7 @@ export default function AdminUsersScreen() {
             >
               <PlusCircle size={14} color="#38bdf8" />
               <Text className="text-[10px] font-black text-sky-400 uppercase tracking-[1px]">
-                +1K TKN
+                C +1K
               </Text>
             </TouchableOpacity>
 

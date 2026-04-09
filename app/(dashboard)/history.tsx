@@ -1,6 +1,6 @@
 /**
  * app/(dashboard)/history.tsx
- * Sovereign Archive & Vault Dashboard
+ * NorthOS Archive & Vault Dashboard
  * ----------------------------------------------------------------------------
  * FEATURES:
  * 1. NATIVE SVG ANIMATION: Exact translation of the user's custom Vault.svg.
