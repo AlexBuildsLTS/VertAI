@@ -149,7 +149,7 @@ const AnimatedConverter = () => {
 // ══════════════════════════════════════════════════════════════════════════════
 const AmbientGradient = ({
   delay = 0,
-  color = '#054aeb',
+  color = '#00081a',
   size,
   top,
   left,
@@ -436,7 +436,7 @@ export default function DashboardScreen() {
     (mutationError as Error)?.message || videoData?.error_message;
 
   return (
-    <SafeAreaView className="flex-1 bg-[#01111fbe]">
+    <SafeAreaView className="flex-1 bg-[#01031fbe]">
       {/* ── AMBIENT ORB DEPLOYMENT ── */}
       <View
         className="absolute inset-0 overflow-hidden"
