@@ -1,6 +1,6 @@
 /**
  * app/(auth)/sign-in.tsx
- * Sovereign NorthOS - Enterprise Authentication Protocol
+ * Sovereign VertAI - Enterprise Authentication Protocol
  * Architecture: 2026 High-Performance Standards (Web Vercel & Native APK)
  * * ============================================================================
  * MODULE OVERVIEW
@@ -198,7 +198,7 @@ const AmbientGradient = memo(
 
     return (
       <Animated.View
-       pointerEvents="none"    
+        pointerEvents="none"
         style={[
           animatedStyle,
           {

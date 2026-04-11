@@ -20,7 +20,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { ThemeProvider, DarkTheme } from '@react-navigation/native';
 import { ProcessingLoader } from '../components/ui/ProcessingLoader';
 
-// 1. Freeze the static image immediately so it doesn't flash
+// 1. Freezes the static image
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const NeonDarkTheme = {
@@ -59,11 +59,11 @@ export default function RootLayout() {
     return cleanup;
   }, [initialize]);
 
-  // 3. SINGLE SOURCE OF TRUTH ROUTING LOGIC
+  // 3. ROUTING LOGIC SINGLE SOURCE OF TRUTH
   useEffect(() => {
     if (isLoading) return;
 
-    // Once auth is loaded, hide the static PNG. The transparent SVG is now showing.
+    // hide the static PNG & The transparent SVG shows
     SplashScreen.hideAsync().catch(() => {});
 
     const inAuthGroup = segments[0] === '(auth)';
@@ -75,7 +75,7 @@ export default function RootLayout() {
     }
   }, [session, isLoading, segments, router]);
 
-  // 4. Trigger the fade out of the transparent SVG
+  // Trigger the fade out of the SVG
   useEffect(() => {
     if (Platform.OS === 'web') {
       setSplashFinished(true);
@@ -87,7 +87,7 @@ export default function RootLayout() {
       setTimeout(() => {
         Animated.timing(fadeAnim, {
           toValue: 0, // Fade opacity to 0
-          duration: 500, // Buttery smooth half-second fade
+          duration: 300, // Buttery smooth half-second fade
           useNativeDriver: true,
         }).start(() => {
           setSplashFinished(true); // Unmount overlay

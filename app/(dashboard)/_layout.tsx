@@ -1,7 +1,7 @@
+// FILE app/(dashboard)/_layout.tsx
 import { Stack } from 'expo-router';
 import { AdaptiveLayout } from '../../components/layout/AdaptiveLayout';
 import { View } from 'react-native';
-
 
 export default function DashboardLayout() {
   return (
