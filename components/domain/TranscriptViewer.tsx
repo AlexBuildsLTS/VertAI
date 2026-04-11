@@ -32,7 +32,7 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
   const hasChapters = chapters && chapters.length > 0;
 
   return (
-    <View className="w-full pt-10 mt-10 border-t border-white/5">
+    <View className="w-full pt-10 mt-10 border-t border-green/5">
       <View className="flex-col gap-12 lg:flex-row lg:gap-16">
         {/* ── LEFT COLUMN: TIMELINE MAPPING (Purple Line Chart) ── */}
         {hasChapters && (

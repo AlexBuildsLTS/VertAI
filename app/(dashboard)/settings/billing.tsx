@@ -1,6 +1,6 @@
 /**
  * app/(dashboard)/settings/billing.tsx
- * NorthOS — Resource Allocation & Token Economy 
+ * NorthOS — Resource Allocation & Token Economy
  * ══════════════════════════════════════════════════════════════════════════════
  * PROTOCOL:
  * 1. TRIPLE-FLEX ARCHITECTURE: SafetyView -> Keyboard -> Scroll flex mapping.
@@ -79,6 +79,7 @@ const NeuralOrb = ({ delay = 0, color = '#8A2BE2' }) => {
 
   return (
     <Animated.View
+      pointerEvents="none"
       style={[
         animatedStyle,
         {

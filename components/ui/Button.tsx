@@ -38,6 +38,7 @@ export const Button = ({
       onPress={onPress}
       disabled={isLoading}
       activeOpacity={0.75}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       className={cn(baseClass, variants[variant], className)}
     >
       {isLoading ? (

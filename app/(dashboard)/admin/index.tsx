@@ -102,6 +102,8 @@ const AmbientGradient = ({ delay = 0, color = '#3B82F6' }) => {
 
   return (
     <Animated.View
+      pointerEvents="none"
+      className="absolute inset-0"
       style={[
         animatedStyle,
         {
@@ -389,15 +391,15 @@ export default function AdminCommandCenter() {
           />
         }
       >
-        <View className="w-full max-w-6xl mx-auto">
-          {/* ════════ 1. COMMAND HEADER ════════ */}
-          <FadeIn delay={100}>
-            <View className="flex-row items-center justify-between mb-10">
-              <View>
-                <Text className="text-4xl font-black tracking-tighter text-white uppercase">
-                  ADMIN
-                </Text>
-                <View className="flex-row items-center gap-2 mt-2">
+          <View className="w-full max-w-6xl mx-auto">
+            {/* ════════ 1. COMMAND HEADER ════════ */}
+            <FadeIn delay={100}>
+              <View className="flex-row items-center justify-between mt-8 mb-10 md:mt-0">
+                <View>
+                  <Text className="text-4xl font-black tracking-tighter text-white uppercase">
+                    ADMIN
+                  </Text>
+                  <View className="flex-row items-center gap-2 mt-2">
                   <RefreshCcw size={12} color="#6366f1" />
                   <Text className="text-[10px] font-black tracking-[4px] text-slate-500 uppercase">
                     Live Registry Active
@@ -432,9 +434,9 @@ export default function AdminCommandCenter() {
           </FadeIn>
 
           {/* ════════ 2. DIAGNOSTICS BAR ════════ */}
-          <FadeIn delay={200}>
-            <GlassCard className="flex-col gap-6 px-6 py-5 mb-10 border md:flex-row md:items-center md:justify-between bg-[#0a0f1c]/80 border-white/5 rounded-3xl">
-              <View className="flex-row items-center gap-4">
+            <FadeIn delay={200}>
+              <GlassCard className="flex-col gap-6 px-4 py-5 mb-10 border md:px-6 md:flex-row md:items-center md:justify-between bg-[#0a0f1c]/80 border-white/5 rounded-3xl">
+                <View className="flex-row items-center gap-4">
                 <View className="items-center justify-center w-10 h-10 border rounded-xl bg-indigo-500/10 border-indigo-500/20">
                   <Server size={18} color="#6366f1" />
                 </View>
@@ -486,14 +488,15 @@ export default function AdminCommandCenter() {
             </Text>
           </View>
 
-          <View className="flex-col gap-4 mb-12 md:flex-row">
-            {/* Registered PIDs */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => router.push('/admin/users')}
-              className="w-full md:flex-1"
-            >
-              <GlassCard className="flex-col justify-between p-6 bg-[#0a0f1c]/80 border-white/5 rounded-3xl h-40 hover:bg-white/[0.04]">
+            <View className="flex-col gap-4 mb-12 md:flex-row">
+              {/* Registered PIDs */}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => router.push('/admin/users')}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                className="w-full md:flex-1"
+              >
+                <GlassCard className="flex-col justify-between p-6 bg-[#0a0f1c]/80 border-white/5 rounded-3xl h-40">
                 <View className="flex-row items-center justify-between">
                   <View className="items-center justify-center w-12 h-12 border rounded-2xl bg-blue-500/10 border-blue-500/20">
                     <Users size={24} color="#6366f1" />
@@ -528,9 +531,9 @@ export default function AdminCommandCenter() {
               </GlassCard>
             </View>
 
-            {/* Critical Alerts */}
-            <View className="w-full md:flex-1">
-              <GlassCard className="flex-col p-6 bg-[#0a0f1c]/80 border-white/5 rounded-3xl min-h-[160px]">
+              {/* Critical Alerts */}
+              <View className="w-full md:flex-1">
+                <GlassCard className="flex-col p-6 bg-[#0a0f1c]/80 border-white/5 rounded-3xl min-h-[160px] md:min-h-[160px]">
                 <View className="flex-row items-center justify-between mb-4">
                   <View className="items-center justify-center w-10 h-10 border rounded-xl bg-rose-500/10 border-rose-500/20">
                     <AlertTriangle
@@ -540,11 +543,12 @@ export default function AdminCommandCenter() {
                       }
                     />
                   </View>
-                  {telemetry.infra.failedJobs > 0 && (
-                    <TouchableOpacity
-                      onPress={handleToggleAlerts}
-                      className="px-4 py-1.5 border rounded-full bg-white/5 border-white/10"
-                    >
+                    {telemetry.infra.failedJobs > 0 && (
+                      <TouchableOpacity
+                        onPress={handleToggleAlerts}
+                        hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                        className="px-4 py-1.5 border rounded-full bg-white/5 border-white/10"
+                      >
                       <Text className="text-[10px] font-black text-white uppercase tracking-widest">
                         {expandedAlerts ? 'Hide' : 'Logs'}
                       </Text>
@@ -601,8 +605,8 @@ export default function AdminCommandCenter() {
             </Text>
           </View>
 
-          <GlassCard className="p-8 bg-[#0a0f1c]/80 border-white/5 rounded-[40px] mb-12">
-            <View className="flex-col gap-12 md:flex-row">
+            <GlassCard className="p-5 md:p-8 bg-[#0a0f1c]/80 border-white/5 rounded-[30px] md:rounded-[40px] mb-12">
+              <View className="flex-col gap-8 md:gap-12 md:flex-row">
               {/* Token Real-time Metrics */}
               <View className="flex-col justify-between flex-1 pb-10 pr-0 border-b border-white/5 md:pb-0 md:border-b-0 md:pr-12 md:border-r">
                 <View className="mb-10">
@@ -774,6 +778,7 @@ export default function AdminCommandCenter() {
                   </View>
                   <TouchableOpacity
                     onPress={() => router.push('/admin/users')}
+                    hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
                     className="items-end w-10"
                   >
                     <ChevronRight size={14} color="#334155" />

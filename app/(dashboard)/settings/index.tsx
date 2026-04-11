@@ -357,18 +357,19 @@ export default function SettingsHubScreen() {
           </View>
           <View className="w-full max-w-2xl px-2">
             <View className="gap-y-4 md:gap-y-6">
-              {SETTING_MODULES.map((mod, index) => (
-                <FadeIn key={mod.id} delay={index * 100}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      if (mod.routeOverride) {
-                        router.push(mod.routeOverride as any);
-                      } else {
-                        router.push(`/settings/${mod.id}` as any);
-                      }
-                    }}
-                    activeOpacity={0.8}
-                  >
+                    {SETTING_MODULES.map((mod, index) => (
+                      <FadeIn key={mod.id} delay={index * 100}>
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (mod.routeOverride) {
+                              router.push(mod.routeOverride as any);
+                            } else {
+                              router.push(`/settings/${mod.id}` as any);
+                            }
+                          }}
+                          activeOpacity={0.8}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
                     <GlassCard
                       glowColor={mod.color as any}
                       style={

@@ -1,4 +1,4 @@
-# ⚡ TranscriberPro — Enterprise Audio Intelligence Engine
+# ⚡ VertAI — Enterprise Audio Intelligence Engine
 
 <div align="center">
 
@@ -101,7 +101,7 @@ sequenceDiagram
 
 ```mermaid
 graph TD;
-    A["TranscriberPro v2.0"]
+    A["VertAI v2.0"]
     A --> B["🌍 Multi-Language Intelligence"]
     A --> C["📱 Social Media Ready"]
     A --> D["🔗 Smart Integrations"]
@@ -146,7 +146,7 @@ graph TD;
 ## 2. 📋 Portfolio Bio + Tech Stack (cvitae-style)
 
 ```text
-TranscriberPro
+VertAI
 
 Enterprise-grade universal video transcription & audio intelligence platform.
 Converts any media URL to searchable text in under 30 seconds using
@@ -169,7 +169,7 @@ DEEPGRAM NOVA-2 | GOOGLE Gemini 3 Flash Preview FLASH | TANSTACK QUERY | ZUSTAND
 The project strictly adheres to Domain-Driven Design (DDD) tailored for Expo Router:
 
 ```text
-/TranscriberPro
+/VertAI
 ├── app/                      # Expo Router App Directory
 │   ├── (auth)/               # Authentication flows (sign-in, sign-up)
 │   ├── (dashboard)/          # Protected Routes (history, settings, video views)

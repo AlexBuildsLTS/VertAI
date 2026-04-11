@@ -82,6 +82,7 @@ const NeuralOrb = ({ delay = 0, color = '#FF007F' }) => {
 
   return (
     <Animated.View
+      pointerEvents="none"
       style={[
         animatedStyle,
         {

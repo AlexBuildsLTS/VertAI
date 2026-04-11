@@ -143,6 +143,7 @@ const AnimatedVaultIcon = () => {
 
   return (
     <Animated.View
+      pointerEvents="none"
       style={[
         floatStyle,
         { width: 140, height: 140, alignSelf: 'center', marginBottom: 20 },
@@ -441,6 +442,7 @@ export default function HistoryScreen() {
                               router.push(`/video/${item.id}` as any)
                             }
                             activeOpacity={0.8}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                           >
                             <GlassCard
                               className="flex-row items-center p-6 bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04] transition-colors rounded-3xl"
@@ -498,6 +500,7 @@ export default function HistoryScreen() {
                               router.push(`/video/${item.id}` as any)
                             }
                             activeOpacity={0.8}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                           >
                             <GlassCard
                               className="flex-row items-center p-6 bg-white/[0.01] border-white/[0.03] hover:bg-white/[0.03] transition-colors rounded-3xl"

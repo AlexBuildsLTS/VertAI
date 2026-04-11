@@ -36,7 +36,6 @@ import { FadeIn } from '../../components/animations/FadeIn';
 import { ProcessingLoader } from '../../components/ui/ProcessingLoader';
 import { cn } from '../../lib/utils';
 
-
 // Native SVG & Animation
 import Svg, { Rect, Path, Polygon } from 'react-native-svg';
 import Animated, {
@@ -150,7 +149,7 @@ const AnimatedConverter = () => {
 // ══════════════════════════════════════════════════════════════════════════════
 const AmbientGradient = ({
   delay = 0,
-  color = '#3B82F6',
+  color = '#054aeb',
   size,
   top,
   left,
@@ -169,25 +168,25 @@ const AmbientGradient = ({
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
-      { scale: interpolate(pulse.value, [0, 1], [1, 1.4]) },
-      { translateX: interpolate(pulse.value, [0, 1], [0.5, width * 0.08]) },
-      { translateY: interpolate(pulse.value, [0, 1], [0, height * 0.06]) },
+      { scale: interpolate(pulse.value, [0, 1], [0.8, 1.8]) },
+      { translateX: interpolate(pulse.value, [0, 1], [0, width * 0.3]) },
+      { translateY: interpolate(pulse.value, [0, 1], [0, height * 0.5]) },
     ],
-    opacity: interpolate(pulse.value, [0, 1], [0.03, 0.08]),
+    opacity: interpolate(pulse.value, [0, 1], [0.02, 0.04]),
   }));
 
   return (
     <Animated.View
-    pointerEvents="none"
+      pointerEvents="none"
       style={[
         animatedStyle,
 
         {
           position: 'absolute',
 
-          width: width * 1,
+          width: width * 0.35,
 
-          height: width * 1,
+          height: width * 0.35,
 
           backgroundColor: color,
 
@@ -200,9 +199,9 @@ const AmbientGradient = ({
 
 const AmbientEngine = React.memo(() => (
   <>
-    <AmbientGradient delay={100} color="#3B82F6" top={-150} left={-100} />
-    <AmbientGradient delay={6000} color="#8B5CF6" top={-100} right={-150} />
-    <AmbientGradient delay={10000} color="#2003fc" bottom={-150} left={-140} />
+    <AmbientGradient delay={500} color="#341539" right={-150} left={-100} />
+    <AmbientGradient delay={4000} color="#8B5CF6" top={-100} right={-150} />
+    <AmbientGradient delay={8000} color="#2003fc" bottom={-150} left={-125} />
   </>
 ));
 
@@ -345,11 +344,16 @@ export default function DashboardScreen() {
     addLog('Validating source and initiating pipeline...', 'info');
 
     try {
-      await processVideo({
+      const result = await processVideo({
         videoUrl: videoUrl,
         language: selectedLanguage,
       });
-      addLog('Pipeline successfully initiated.', 'success');
+
+      if (result.success) {
+        addLog('Pipeline successfully initiated.', 'success');
+      } else {
+        addLog(result.errorMsg || 'Pipeline initiation failed.', 'error');
+      }
     } catch (err: unknown) {
       addLog(
         `Initialization failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -524,6 +528,7 @@ export default function DashboardScreen() {
                               key={lang}
                               onPress={() => setSelectedLanguage(lang)}
                               disabled={effectivelyLoading}
+                              hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
                               className={`px-5 py-2.5 rounded-xl border transition-colors ${
                                 active
                                   ? 'bg-blue-500/20 border-blue-500/50'
@@ -553,6 +558,7 @@ export default function DashboardScreen() {
                             setIsDropdownOpen(!isDropdownOpen);
                           }}
                           disabled={effectivelyLoading}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                           className="flex-row items-center justify-between px-5 py-4 border rounded-xl bg-white/[0.05] border-white/10 hover:bg-white/[0.08]"
                         >
                           <Text className="text-sm font-semibold tracking-wide text-white/80">
@@ -740,7 +746,7 @@ export default function DashboardScreen() {
       </KeyboardAvoidingView>
       <View className="absolute items-center justify-center w-full bottom-4">
         <Text className="text-[10px] text-white/80 font-mono">
-          &copy; {new Date().getFullYear()} TranscriberPro All rights reserved
+          &copy; {new Date().getFullYear()} VerAI All rights reserved
         </Text>
       </View>
     </SafeAreaView>
