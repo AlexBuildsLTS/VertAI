@@ -4,12 +4,13 @@
  * ══════════════════════════════════════════════════════════════════════════════
  * PROTOCOL:
  * 1. BIOMETRIC KERNEL: Real hardware verification via expo-local-authentication.
- * 2. CREDENTIAL ROTATION: Current-Password + New-Password + Confirmation.
- * 3. AI API VAULT (STILL NOT FINISHED): Encrypted management for OpenAI, Gemini, and Anthropic
+ * 2. 4-DIGIT PIN FALLBACK: Cross-platform vault access for Web & Desktop.
+ * 3. CREDENTIAL ROTATION: Current-Password + New-Password + Confirmation.
+ * 4. ENCRYPTED AI VAULT: Locked behind Biometrics/PIN to protect API keys.
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -22,6 +23,7 @@ import {
   KeyboardAvoidingView,
   StyleSheet,
   TextInput,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -32,6 +34,8 @@ import {
   Fingerprint,
   Cpu,
   ShieldAlert,
+  KeyRound,
+  Unlock,
 } from 'lucide-react-native';
 
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -59,7 +63,14 @@ const THEME = {
 };
 
 // ─── MODULE 1: AMBIENT VISUAL ENGINE (APK TOUCH-SAFE) ───────────────────────
-const NeuralOrb = ({ delay = 0, color = THEME.danger }: any) => {
+const NeuralOrb = ({
+  delay = 0,
+  color = THEME.danger,
+  top,
+  bottom,
+  left,
+  right,
+}: any) => {
   const pulse = useSharedValue(0);
   const { width, height } = Dimensions.get('window');
 
@@ -88,7 +99,11 @@ const NeuralOrb = ({ delay = 0, color = THEME.danger }: any) => {
           height: 500,
           backgroundColor: color,
           borderRadius: 250,
-          pointerEvents: 'none', // CRITICAL FIX: Ensures it never blocks touches
+          top,
+          bottom,
+          left,
+          right,
+          pointerEvents: 'none',
           ...(Platform.OS === 'web' ? ({ filter: 'blur(120px)' } as any) : {}),
         },
         animatedStyle,
@@ -116,6 +131,17 @@ const ENTROPY_COLORS = [
   THEME.success,
 ];
 
+// ─── INPUT STYLE CONSTANT (Fixes Android Hover Bug) ─────────────────────────
+const strictInputStyle = {
+  flex: 1,
+  height: '100%',
+  color: '#FFFFFF',
+  paddingVertical: 0,
+  margin: 0,
+  textAlignVertical: 'center',
+  ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
+} as any;
+
 // ─── MODULE 3: MAIN COMPONENT ───────────────────────────────────────────────
 export default function SecuritySettingsScreen() {
   const router = useRouter();
@@ -129,7 +155,7 @@ export default function SecuritySettingsScreen() {
   const [confirmPw, setConfirmPw] = useState('');
   const [isRotating, setIsRotating] = useState(false);
 
-  // ── API Key States ──
+  // ── Vault & API Key States ──
   const [apiKeys, setApiKeys] = useState({
     openai: '',
     gemini: '',
@@ -137,19 +163,29 @@ export default function SecuritySettingsScreen() {
   });
   const [isSyncingKeys, setIsSyncingKeys] = useState(false);
 
-  // ── Biometric States ──
+  // ── Security Gate States ──
+  const [isVaultLocked, setIsVaultLocked] = useState(false);
+  const [unlockPinEntry, setUnlockPinEntry] = useState('');
+  const [showPinPad, setShowPinPad] = useState(false);
+
+  // ── Biometric & PIN Configuration States ──
   const [bioSupported, setBioSupported] = useState(false);
   const [bioEnabled, setBioEnabled] = useState(false);
   const [bioLoading, setBioLoading] = useState(false);
+  const [masterPin, setMasterPin] = useState('');
+  const [isSavingPin, setIsSavingPin] = useState(false);
 
   // ── Initialization ──
   useEffect(() => {
     (async () => {
-      if (Platform.OS === 'web') return;
-      const hasHw = await LocalAuthentication.hasHardwareAsync();
-      const enrolled = await LocalAuthentication.isEnrolledAsync();
-      setBioSupported(hasHw && enrolled);
+      // 1. Check Hardware
+      if (Platform.OS !== 'web') {
+        const hasHw = await LocalAuthentication.hasHardwareAsync();
+        const enrolled = await LocalAuthentication.isEnrolledAsync();
+        setBioSupported(hasHw && enrolled);
+      }
 
+      // 2. Fetch Vault Data
       if (user) {
         const { data } = await supabase
           .from('profiles')
@@ -158,7 +194,10 @@ export default function SecuritySettingsScreen() {
           .maybeSingle();
 
         if (data) {
-          setBioEnabled(!!data.biometrics_enabled);
+          const isBioOn = !!data.biometrics_enabled;
+          setBioEnabled(isBioOn);
+
+          let fetchedPin = '';
           try {
             if (data.custom_api_key) {
               const keys = JSON.parse(data.custom_api_key);
@@ -167,16 +206,25 @@ export default function SecuritySettingsScreen() {
                 gemini: keys.gemini ?? '',
                 anthropic: keys.anthropic ?? '',
               });
+              if (keys.pin) {
+                fetchedPin = keys.pin;
+                setMasterPin(keys.pin);
+              }
             }
           } catch (e) {
-            console.error('Vault integrity check failed.', e);
+            console.error('Vault integrity parse failed.', e);
+          }
+
+          // 3. Lock the vault if ANY security is enabled
+          if (isBioOn || fetchedPin.length > 0) {
+            setIsVaultLocked(true);
           }
         }
       }
     })();
   }, [user]);
 
-  // ── Action: Biometrics ──
+  // ── Action: Toggle Biometrics ──
   const handleBioToggle = async () => {
     if (!bioSupported) return;
     setBioLoading(true);
@@ -192,9 +240,64 @@ export default function SecuritySettingsScreen() {
         .update({ biometrics_enabled: !bioEnabled })
         .eq('id', user.id);
 
-      if (!error) setBioEnabled(!bioEnabled);
+      if (!error) {
+        setBioEnabled(!bioEnabled);
+        if (!bioEnabled === true) setIsVaultLocked(true); // Lock immediately if turning on
+      }
     }
     setBioLoading(false);
+  };
+
+  // ── Action: Save PIN ──
+  const handleSavePin = async () => {
+    if (masterPin.length > 0 && masterPin.length < 4) {
+      Alert.alert(
+        'Protocol Error',
+        'PIN must be exactly 4 digits or empty to remove.',
+      );
+      return;
+    }
+    setIsSavingPin(true);
+    await handleSaveApiVault(masterPin); // Piggyback on the vault saver
+    setIsSavingPin(false);
+    if (masterPin.length === 4) setIsVaultLocked(true); // Lock immediately if setting new PIN
+  };
+
+  // ── Action: Unlock Vault ──
+  const attemptUnlock = async () => {
+    // Try biometrics first if enabled
+    if (bioEnabled && bioSupported) {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Unlock Security Vault',
+      });
+      if (result.success) {
+        setIsVaultLocked(false);
+        setShowPinPad(false);
+        return;
+      }
+    }
+
+    // If no biometrics or it failed, fallback to PIN if they have one
+    if (masterPin) {
+      setShowPinPad(true);
+    } else if (!bioEnabled) {
+      // Failsafe: if neither are enabled somehow, just open it
+      setIsVaultLocked(false);
+    }
+  };
+
+  const handlePinEntry = (code: string) => {
+    setUnlockPinEntry(code);
+    if (code.length === 4) {
+      if (code === masterPin) {
+        setIsVaultLocked(false);
+        setShowPinPad(false);
+        setUnlockPinEntry('');
+      } else {
+        Alert.alert('Access Denied', 'Invalid PIN Code.');
+        setUnlockPinEntry('');
+      }
+    }
   };
 
   // ── Action: Credential Rotation ──
@@ -212,7 +315,6 @@ export default function SecuritySettingsScreen() {
     }
 
     setIsRotating(true);
-    // Note: Requires the user to have recently signed in for security purposes
     const { error } = await supabase.auth.updateUser({ password: newPw });
 
     if (error) {
@@ -230,15 +332,17 @@ export default function SecuritySettingsScreen() {
   };
 
   // ── Action: API Vault Save ──
-  const handleSaveApiVault = async () => {
+  const handleSaveApiVault = async (overridePin?: string) => {
     if (!user) return;
     setIsSyncingKeys(true);
 
-    // Only save keys that are actually provided to keep the DB clean
+    const targetPin = overridePin !== undefined ? overridePin : masterPin;
+
     const cleanedKeys = {
       ...(apiKeys.openai ? { openai: apiKeys.openai } : {}),
       ...(apiKeys.gemini ? { gemini: apiKeys.gemini } : {}),
       ...(apiKeys.anthropic ? { anthropic: apiKeys.anthropic } : {}),
+      ...(targetPin ? { pin: targetPin } : {}),
     };
 
     const vaultString =
@@ -252,7 +356,13 @@ export default function SecuritySettingsScreen() {
     if (error) {
       Alert.alert('Vault Error', error.message);
     } else {
-      Alert.alert('Vault Sealed', 'AI configurations encrypted and saved.');
+      if (overridePin === undefined)
+        Alert.alert('Vault Sealed', 'AI configurations encrypted and saved.');
+      else
+        Alert.alert(
+          'Protocol Accepted',
+          targetPin ? '4-Digit PIN registered.' : 'PIN removed.',
+        );
     }
     setIsSyncingKeys(false);
   };
@@ -261,7 +371,6 @@ export default function SecuritySettingsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-[#000012]">
-      {/* Background Orbs */}
       <NeuralOrb delay={0} color={THEME.danger} top={-50} left={-100} />
       <NeuralOrb delay={4000} color={THEME.purple} bottom={-100} right={-50} />
 
@@ -271,86 +380,137 @@ export default function SecuritySettingsScreen() {
       >
         <ScrollView
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
             paddingHorizontal: isMobile ? 16 : 40,
             paddingTop: 16,
             paddingBottom: 150,
             flexGrow: 1,
-            maxWidth: 800, // Thinner width for settings pages looks cleaner
+            maxWidth: 800,
             alignSelf: 'center',
             width: '100%',
           }}
         >
-          {/* ── RETURN NAVIGATION ── */}
-          <FadeIn delay={100} className="z-50 flex-col mb-12">
+          {/* ── RETURN NAVIGATION & CENTERED HEADER ── */}
+          <FadeIn
+            delay={100}
+            className="relative z-50 items-center justify-center w-full pt-4 mb-12"
+          >
+            {/* 1. Return Button (Locked to left edge, vertically centered to image) */}
             <TouchableOpacity
               onPress={() =>
-                router.canGoBack() ? router.back() : router.replace('/')
+                router.canGoBack() ? router.back() : router.replace('settings/')
               }
-              className="flex-row items-center self-start mb-8 transition-transform gap-x-3 active:scale-95"
+              className="absolute left-0 z-50 flex-row items-center gap-x-2 active:scale-95"
+              style={{ top: 26 }}
               activeOpacity={0.7}
             >
-              <ArrowBigLeftDash size={22} color={THEME.danger} />
-              <Text className="text-[11px] font-black tracking-[4px] text-[#FF007F] uppercase">
+              <ArrowBigLeftDash size={20} color={THEME.danger} />
+              <Text className="text-[10px] font-black tracking-[4px] text-[#FF007F] uppercase hidden md:flex">
                 RETURN
               </Text>
             </TouchableOpacity>
 
-            <View>
-              <Text className="text-4xl font-black leading-none tracking-tighter text-white uppercase md:text-5xl">
-                Security <Text style={{ color: THEME.danger }}>Vault</Text>
-              </Text>
+            {/* 2. Centered Logo & Glowing Line Stack */}
+            <View className="items-center">
+              <Image
+                source={require('../../../assets/sha128.png')}
+                style={{ width: 72, height: 72 }}
+                resizeMode="contain"
+              />
               <View className="h-1 w-24 bg-[#FF007F] mt-4 rounded-full shadow-[0_0_15px_#FF007F]" />
             </View>
           </FadeIn>
 
-          {/* ── BIOMETRIC SHIELD ── */}
+          {/* ── ACCESS PROTOCOLS (BIOMETRICS + PIN) ── */}
           <FadeIn delay={200}>
             <GlassCard className="p-6 md:p-10 mb-8 bg-white/[0.015] border-white/5 rounded-[32px]">
               <View className="flex-row items-center mb-8 gap-x-4">
                 <Fingerprint size={28} color={THEME.danger} />
                 <Text className="text-lg font-black tracking-widest text-white uppercase md:text-xl">
-                  Biometric Kernel
+                  Access Protocols
                 </Text>
               </View>
 
-              <View className="flex-row items-center justify-between p-5 md:p-6 border bg-black/40 border-white/10 rounded-[24px]">
-                <View>
-                  <Text className="text-xs font-bold tracking-wider text-white uppercase md:text-sm">
-                    System Access Toggle
-                  </Text>
-                  <Text className="text-[9px] md:text-[10px] font-black text-white/30 uppercase tracking-[2px] mt-1.5">
-                    Status:{' '}
-                    {bioSupported
-                      ? bioEnabled
-                        ? 'ACTIVE'
-                        : 'READY'
-                      : 'NO HARDWARE'}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={handleBioToggle}
-                  disabled={!bioSupported || bioLoading}
-                  style={[
-                    styles.toggleBase,
-                    bioEnabled ? styles.toggleActive : styles.toggleInactive,
-                  ]}
-                  className="p-1 rounded-full"
-                >
-                  <View
+              <View className="gap-y-4">
+                {/* Hardware Biometrics */}
+                <View className="flex-row items-center justify-between p-5 md:p-6 border bg-black/40 border-white/10 rounded-[24px]">
+                  <View>
+                    <Text className="text-xs font-bold tracking-wider text-white uppercase md:text-sm">
+                      Hardware Shield
+                    </Text>
+                    <Text className="text-[9px] md:text-[10px] font-black text-white/30 uppercase tracking-[2px] mt-1.5">
+                      Status:{' '}
+                      {bioSupported
+                        ? bioEnabled
+                          ? 'ACTIVE'
+                          : 'READY'
+                        : 'NO HARDWARE'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={handleBioToggle}
+                    disabled={!bioSupported || bioLoading}
                     style={[
-                      styles.toggleKnob,
-                      bioEnabled ? styles.knobActive : styles.knobInactive,
+                      styles.toggleBase,
+                      bioEnabled ? styles.toggleActive : styles.toggleInactive,
                     ]}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {bioLoading && (
-                <View className="absolute inset-0 flex-row items-center justify-center bg-[#000012]/50 rounded-[32px]">
-                  <ActivityIndicator size="large" color={THEME.danger} />
+                    className="p-1 rounded-full"
+                  >
+                    <View
+                      style={[
+                        styles.toggleKnob,
+                        bioEnabled ? styles.knobActive : styles.knobInactive,
+                      ]}
+                    />
+                  </TouchableOpacity>
                 </View>
-              )}
+
+                {/* 4-Digit Fallback PIN */}
+                <View className="flex-row items-center justify-between p-5 md:p-6 border bg-black/40 border-white/10 rounded-[24px]">
+                  <View className="flex-1 mr-4">
+                    <Text className="text-xs font-bold tracking-wider text-white uppercase md:text-sm">
+                      Vault PIN (4-Digit)
+                    </Text>
+                    <Text className="text-[9px] md:text-[10px] font-black text-white/30 uppercase tracking-[2px] mt-1.5 leading-relaxed">
+                      Primary lock for Web. Fallback for Mobile.
+                    </Text>
+                  </View>
+
+                  <View className="flex-row items-center gap-x-3">
+                    <View className="w-24 h-12 px-2 overflow-hidden border border-white/10 bg-black/60 rounded-xl">
+                      <TextInput
+                        value={masterPin}
+                        onChangeText={setMasterPin}
+                        keyboardType="number-pad"
+                        maxLength={4}
+                        secureTextEntry
+                        placeholder="••••"
+                        placeholderTextColor="rgba(255,255,255,0.2)"
+                        style={[
+                          strictInputStyle,
+                          {
+                            fontSize: 20,
+                            letterSpacing: 6,
+                            textAlign: 'center',
+                          },
+                        ]}
+                      />
+                    </View>
+                    <TouchableOpacity
+                      onPress={handleSavePin}
+                      disabled={isSavingPin}
+                      className="h-12 w-12 items-center justify-center bg-[#FF007F]/10 border border-[#FF007F]/30 rounded-xl active:scale-95"
+                    >
+                      {isSavingPin ? (
+                        <ActivityIndicator size="small" color={THEME.danger} />
+                      ) : (
+                        <KeyRound size={18} color={THEME.danger} />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
             </GlassCard>
           </FadeIn>
 
@@ -369,28 +529,32 @@ export default function SecuritySettingsScreen() {
                   <Text className="text-[9px] font-black text-[#FF007F] tracking-[3px] uppercase mb-3 ml-2">
                     Current Verification
                   </Text>
-                  <TextInput
-                    value={currentPw}
-                    onChangeText={setCurrentPw}
-                    secureTextEntry
-                    placeholder="••••••••••••"
-                    placeholderTextColor="rgba(255,255,255,0.2)"
-                    className="h-14 px-5 font-mono text-sm text-white border rounded-[20px] bg-black/40 border-white/10 focus:border-[#FF007F]"
-                  />
+                  <View className="h-14 overflow-hidden border bg-black/40 border-white/10 rounded-[20px] px-5 focus:border-[#FF007F]">
+                    <TextInput
+                      value={currentPw}
+                      onChangeText={setCurrentPw}
+                      secureTextEntry
+                      placeholder="••••••••••••"
+                      placeholderTextColor="rgba(255,255,255,0.2)"
+                      style={strictInputStyle}
+                    />
+                  </View>
                 </View>
 
                 <View>
                   <Text className="text-[9px] font-black text-[#FF007F] tracking-[3px] uppercase mb-3 ml-2">
                     New Identity Code
                   </Text>
-                  <TextInput
-                    value={newPw}
-                    onChangeText={setNewPw}
-                    secureTextEntry
-                    placeholder="Min 10 Characters"
-                    placeholderTextColor="rgba(255,255,255,0.2)"
-                    className="h-14 px-5 font-mono text-sm text-white border rounded-[20px] bg-black/40 border-white/10 focus:border-[#FF007F]"
-                  />
+                  <View className="h-14 overflow-hidden border bg-black/40 border-white/10 rounded-[20px] px-5 focus:border-[#FF007F]">
+                    <TextInput
+                      value={newPw}
+                      onChangeText={setNewPw}
+                      secureTextEntry
+                      placeholder="Min 10 Characters"
+                      placeholderTextColor="rgba(255,255,255,0.2)"
+                      style={strictInputStyle}
+                    />
+                  </View>
                   {newPw.length > 0 && (
                     <View className="flex-row h-1.5 px-2 mt-4 gap-x-2">
                       {[1, 2, 3, 4].map((n) => (
@@ -413,14 +577,16 @@ export default function SecuritySettingsScreen() {
                   <Text className="text-[9px] font-black text-[#FF007F] tracking-[3px] uppercase mb-3 ml-2">
                     Verify Identity Code
                   </Text>
-                  <TextInput
-                    value={confirmPw}
-                    onChangeText={setConfirmPw}
-                    secureTextEntry
-                    placeholder="Verify New Code"
-                    placeholderTextColor="rgba(255,255,255,0.2)"
-                    className="h-14 px-5 font-mono text-sm text-white border rounded-[20px] bg-black/40 border-white/10 focus:border-[#FF007F]"
-                  />
+                  <View className="h-14 overflow-hidden border bg-black/40 border-white/10 rounded-[20px] px-5 focus:border-[#FF007F]">
+                    <TextInput
+                      value={confirmPw}
+                      onChangeText={setConfirmPw}
+                      secureTextEntry
+                      placeholder="Verify New Code"
+                      placeholderTextColor="rgba(255,255,255,0.2)"
+                      style={strictInputStyle}
+                    />
+                  </View>
                 </View>
 
                 <TouchableOpacity
@@ -437,85 +603,152 @@ export default function SecuritySettingsScreen() {
                       isRotating ? 'ml-3 text-white/50' : 'text-[#FF007F]',
                     )}
                   >
-                    {isRotating ? 'Rotating...' : 'Rotate Credentials'}
+                    {isRotating ? 'Rotating...' : 'CHANGE PASSWORD'}
                   </Text>
                 </TouchableOpacity>
               </View>
             </GlassCard>
           </FadeIn>
 
-          {/* ── AI INTEGRATION VAULT ── */}
+          {/* ── AI INTEGRATION VAULT (WITH LOCKOUT LOGIC) ── */}
           <FadeIn delay={400}>
-            <GlassCard className="p-6 md:p-10 mb-8 bg-white/[0.015] border-white/5 rounded-[32px]">
-              <View className="flex-row items-center mb-10 gap-x-4">
-                <Cpu size={24} color={THEME.cyan} />
-                <Text className="text-lg font-black tracking-widest text-white uppercase md:text-xl">
-                  AI Nodes (AES-256)
-                </Text>
-              </View>
+            <GlassCard className="p-6 md:p-10 mb-8 bg-white/[0.015] border-white/5 rounded-[32px] overflow-hidden">
+              {/* LOCK SCREEN OVERLAY */}
+              {isVaultLocked ? (
+                <View className="items-center justify-center py-10">
+                  <Lock
+                    size={48}
+                    color={THEME.cyan}
+                    style={{ marginBottom: 24, opacity: 0.8 }}
+                  />
+                  <Text className="mb-2 text-2xl font-black tracking-widest text-white uppercase">
+                    Vault Sealed
+                  </Text>
+                  <Text className="text-xs text-white/40 tracking-[2px] uppercase mb-10 text-center">
+                    API Keys are protected
+                  </Text>
 
-              <View className="gap-y-6">
-                <View>
-                  <Text className="text-[9px] font-black text-[#00F0FF] tracking-[3px] uppercase mb-3 ml-2">
-                    OpenAI API Key
-                  </Text>
-                  <TextInput
-                    value={apiKeys.openai}
-                    onChangeText={(v) =>
-                      setApiKeys((p) => ({ ...p, openai: v }))
-                    }
-                    placeholder="sk-..."
-                    placeholderTextColor="rgba(255,255,255,0.2)"
-                    className="h-14 px-5 font-mono text-sm text-white border rounded-[20px] bg-black/40 border-white/10 focus:border-[#00F0FF]"
-                  />
+                  {showPinPad ? (
+                    <View className="items-center w-full max-w-[200px]">
+                      <Text className="text-[9px] font-black text-[#00F0FF] tracking-[3px] uppercase mb-4">
+                        Enter 4-Digit PIN
+                      </Text>
+                      <View className="w-full h-16 px-4 overflow-hidden border border-cyan-500/30 bg-black/80 rounded-2xl">
+                        <TextInput
+                          value={unlockPinEntry}
+                          onChangeText={handlePinEntry}
+                          keyboardType="number-pad"
+                          maxLength={4}
+                          secureTextEntry
+                          autoFocus
+                          placeholder="••••"
+                          placeholderTextColor="rgba(255,255,255,0.1)"
+                          style={[
+                            strictInputStyle,
+                            {
+                              fontSize: 24,
+                              letterSpacing: 16,
+                              textAlign: 'center',
+                              color: THEME.cyan,
+                            },
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={attemptUnlock}
+                      className="flex-row items-center px-8 py-4 bg-[#00F0FF]/10 border border-[#00F0FF]/30 rounded-2xl active:scale-95"
+                    >
+                      <Unlock size={16} color={THEME.cyan} className="mr-3" />
+                      <Text className="text-xs font-black text-[#00F0FF] uppercase tracking-widest">
+                        Authenticate to Open
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
+              ) : (
+                /* UNLOCKED CONTENT */
                 <View>
-                  <Text className="text-[9px] font-black text-[#00F0FF] tracking-[3px] uppercase mb-3 ml-2">
-                    Google Gemini Key
-                  </Text>
-                  <TextInput
-                    value={apiKeys.gemini}
-                    onChangeText={(v) =>
-                      setApiKeys((p) => ({ ...p, gemini: v }))
-                    }
-                    placeholder="AIza..."
-                    placeholderTextColor="rgba(255,255,255,0.2)"
-                    className="h-14 px-5 font-mono text-sm text-white border rounded-[20px] bg-black/40 border-white/10 focus:border-[#00F0FF]"
-                  />
-                </View>
-                <View>
-                  <Text className="text-[9px] font-black text-[#00F0FF] tracking-[3px] uppercase mb-3 ml-2">
-                    Anthropic Key
-                  </Text>
-                  <TextInput
-                    value={apiKeys.anthropic}
-                    onChangeText={(v) =>
-                      setApiKeys((p) => ({ ...p, anthropic: v }))
-                    }
-                    placeholder="sk-ant-..."
-                    placeholderTextColor="rgba(255,255,255,0.2)"
-                    className="h-14 px-5 font-mono text-sm text-white border rounded-[20px] bg-black/40 border-white/10 focus:border-[#00F0FF]"
-                  />
-                </View>
+                  <View className="flex-row items-center mb-10 gap-x-4">
+                    <Cpu size={24} color={THEME.cyan} />
+                    <Text className="text-lg font-black tracking-widest text-white uppercase md:text-xl">
+                      API KEYS (AES-256)
+                    </Text>
+                  </View>
 
-                <TouchableOpacity
-                  onPress={handleSaveApiVault}
-                  disabled={isSyncingKeys}
-                  className="flex-row items-center justify-center h-14 mt-4 bg-[#00F0FF]/10 border border-[#00F0FF]/30 rounded-[20px] active:scale-95 transition-transform"
-                >
-                  {isSyncingKeys ? (
-                    <ActivityIndicator size="small" color={THEME.cyan} />
-                  ) : null}
-                  <Text
-                    className={cn(
-                      'text-[11px] font-black uppercase tracking-widest',
-                      isSyncingKeys ? 'ml-3 text-white/50' : 'text-[#00F0FF]',
-                    )}
-                  >
-                    {isSyncingKeys ? 'Sealing...' : 'Seal Vault'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                  <View className="gap-y-6">
+                    <View>
+                      <Text className="text-[9px] font-black text-[#00F0FF] tracking-[3px] uppercase mb-3 ml-2">
+                        OpenAI API Key
+                      </Text>
+                      <View className="h-14 overflow-hidden border bg-black/40 border-white/10 rounded-[20px] px-5 focus:border-[#00F0FF]">
+                        <TextInput
+                          value={apiKeys.openai}
+                          onChangeText={(v) =>
+                            setApiKeys((p) => ({ ...p, openai: v }))
+                          }
+                          placeholder="sk-..."
+                          placeholderTextColor="rgba(255,255,255,0.2)"
+                          style={strictInputStyle}
+                        />
+                      </View>
+                    </View>
+                    <View>
+                      <Text className="text-[9px] font-black text-[#00F0FF] tracking-[3px] uppercase mb-3 ml-2">
+                        Google Gemini Key
+                      </Text>
+                      <View className="h-14 overflow-hidden border bg-black/40 border-white/10 rounded-[20px] px-5 focus:border-[#00F0FF]">
+                        <TextInput
+                          value={apiKeys.gemini}
+                          onChangeText={(v) =>
+                            setApiKeys((p) => ({ ...p, gemini: v }))
+                          }
+                          placeholder="AIza..."
+                          placeholderTextColor="rgba(255,255,255,0.2)"
+                          style={strictInputStyle}
+                        />
+                      </View>
+                    </View>
+                    <View>
+                      <Text className="text-[9px] font-black text-[#00F0FF] tracking-[3px] uppercase mb-3 ml-2">
+                        Anthropic Key
+                      </Text>
+                      <View className="h-14 overflow-hidden border bg-black/40 border-white/10 rounded-[20px] px-5 focus:border-[#00F0FF]">
+                        <TextInput
+                          value={apiKeys.anthropic}
+                          onChangeText={(v) =>
+                            setApiKeys((p) => ({ ...p, anthropic: v }))
+                          }
+                          placeholder="sk-ant-..."
+                          placeholderTextColor="rgba(255,255,255,0.2)"
+                          style={strictInputStyle}
+                        />
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      onPress={() => handleSaveApiVault()}
+                      disabled={isSyncingKeys}
+                      className="flex-row items-center justify-center h-14 mt-4 bg-[#00F0FF]/10 border border-[#00F0FF]/30 rounded-[20px] active:scale-95 transition-transform"
+                    >
+                      {isSyncingKeys ? (
+                        <ActivityIndicator size="small" color={THEME.cyan} />
+                      ) : null}
+                      <Text
+                        className={cn(
+                          'text-[11px] font-black uppercase tracking-widest',
+                          isSyncingKeys
+                            ? 'ml-3 text-white/50'
+                            : 'text-[#00F0FF]',
+                        )}
+                      >
+                        {isSyncingKeys ? 'Sealing...' : 'Seal Vault Keys'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </GlassCard>
           </FadeIn>
 
@@ -525,12 +758,12 @@ export default function SecuritySettingsScreen() {
               <View className="flex-row items-center mb-6 gap-x-4">
                 <ShieldAlert size={28} color={THEME.danger} />
                 <Text className="text-lg font-black tracking-widest text-white uppercase md:text-xl">
-                  Identity Purge
+                  DELETE Account
                 </Text>
               </View>
               <Text className="mb-10 text-[10px] md:text-xs leading-6 tracking-[2px] uppercase text-white/40">
-                Permanent deconstruction of all digital footprints from the
-                VerAI
+                Permanent removal of all digital footprints associated with this
+                account
               </Text>
               <TouchableOpacity
                 onPress={() =>
@@ -542,7 +775,7 @@ export default function SecuritySettingsScreen() {
                 className="items-center justify-center h-14 border border-rose-500/20 bg-rose-500/10 rounded-[20px] active:scale-95 transition-transform"
               >
                 <Text className="text-[10px] md:text-xs font-black text-rose-500 uppercase tracking-[4px]">
-                  Deconstruct Account
+                  Account Closure
                 </Text>
               </TouchableOpacity>
             </GlassCard>
@@ -551,7 +784,7 @@ export default function SecuritySettingsScreen() {
           <View className="items-center mt-20 opacity-30">
             <View className="h-[1px] w-12 bg-white/20 mb-4" />
             <Text className="text-[9px] font-mono tracking-[6px] text-white uppercase text-center">
-              VerAI Security
+              VerAI Security Core
             </Text>
           </View>
         </ScrollView>

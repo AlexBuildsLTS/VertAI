@@ -3,6 +3,7 @@
  * ══════════════════════════════════════════════════════════════════════════════
  * User Profile Management — Identity data, avatar sync, and account metrics.
  * Architecture: 2026 High-Performance Standards (Web Vercel & Native APK)
+ * ══════════════════════════════════════════════════════════════════════════════
  */
 
 import React, { memo, useState, useEffect, useCallback } from 'react';
@@ -18,9 +19,12 @@ import {
   Image,
   KeyboardAvoidingView,
   StyleSheet,
+  TextInput, // Directly imported for absolute cross-platform alignment control
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer'; // Required for Native Android binary uploads
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // ─── ICONS ───────────────────────────────────────────────────────────────────
@@ -40,7 +44,6 @@ import {
 
 // ─── SYSTEM COMPONENTS ───────────────────────────────────────────────────────
 import { GlassCard } from '../../../components/ui/GlassCard';
-import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { FadeIn } from '../../../components/animations/FadeIn';
 import { useAuthStore } from '../../../store/useAuthStore';
@@ -87,7 +90,7 @@ const getRoleConfig = (role?: string) => {
 };
 
 // ─── MODULE: AMBIENT NEURAL ORBS ─────────────────────────────────────────────
-// 60fps hardware-accelerated background glow. pointerEvents="none" prevents
+// Hardware-accelerated background glow. pointerEvents="none" prevents
 // touch interception on Android APK.
 const NeuralOrb = memo(
   ({ delay = 0, color = '#00F0FF' }: { delay?: number; color?: string }) => {
@@ -252,26 +255,45 @@ export default function ProfileSettingsScreen() {
   }, [user]);
 
   // ─── STORAGE BUCKET UPLOAD ENGINE ────────────────────────────────────────
-  // Uploads selected image to Supabase Storage and updates profile record.
+  // Robust Universal Upload: Handles Blob on Web and Base64 Buffer on Android/iOS
   const performAvatarSync = async (asset: ImagePicker.ImagePickerAsset) => {
     setIsUploading(true);
     pulseRing();
     try {
-      const response = await fetch(asset.uri);
-      const blob = await response.blob();
       const ext = asset.uri.split('.').pop()?.toLowerCase() ?? 'jpg';
       const fileName = `${user!.id}/avatar_${Date.now()}.${ext}`;
+      let uploadData: any;
 
+      if (Platform.OS === 'web') {
+        // Web Env: Fetch natively resolves the Blob
+        const response = await fetch(asset.uri);
+        uploadData = await response.blob();
+      } else {
+        // Native: Read FileSystem to Base64 to bypass local URI restrictions
+        const FS = FileSystem as any;
+        const base64String = await FS.readAsStringAsync(asset.uri, {
+          encoding: 'base64',
+        });
+        uploadData = decode(base64String); // Converts Base64 to ArrowBuffer for SupaDB
+      }
+
+      // Execute Storage Upload
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, blob, { contentType: `image/${ext}`, upsert: true });
+        .upload(fileName, uploadData, {
+          contentType: `image/${ext}`,
+          upsert: true,
+        });
+
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage
         .from('avatars')
         .getPublicUrl(fileName);
+
       setAvatarUrl(urlData.publicUrl);
 
+      // Commit to Database Profile
       await supabase
         .from('profiles')
         .update({
@@ -298,7 +320,7 @@ export default function ProfileSettingsScreen() {
   // Persists full name changes to Supabase profiles table and auth metadata.
   const handleSaveProfile = useCallback(async () => {
     if (!user || !fullName.trim()) {
-      Alert.alert('Input Required', 'Operative designation cannot be blank.');
+      Alert.alert('Input Required', 'Username designation cannot be blank.');
       return;
     }
     setIsSaving(true);
@@ -338,7 +360,7 @@ export default function ProfileSettingsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-[#020205]">
-      {/* Ambient background orbs — pointerEvents none prevents Android touch blocking */}
+      {/* Ambient background orbs */}
       <View className="absolute inset-0 overflow-hidden" pointerEvents="none">
         <NeuralOrb delay={0} color="#00F0FF" />
         <NeuralOrb delay={4000} color="#FF007F" />
@@ -351,6 +373,7 @@ export default function ProfileSettingsScreen() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 150 }}
+          keyboardShouldPersistTaps="handled"
         >
           <View className="w-full max-w-2xl px-6 pt-12 mx-auto">
             {/* ─── RETURN BUTTON ───────────────────────────────────────────── */}
@@ -402,7 +425,7 @@ export default function ProfileSettingsScreen() {
             <FadeIn delay={100}>
               <GlassCard className="items-center p-10 mb-8 border-white/5">
                 <View className="relative mb-8">
-                  {/* Reactive energy ring — pulses on upload */}
+                  {/* Reactive energy ring */}
                   <Animated.View
                     pointerEvents="none"
                     style={[
@@ -446,7 +469,7 @@ export default function ProfileSettingsScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Avatar action pill — upload + reset buttons */}
+                {/* Avatar action pill */}
                 <View style={styles.actionPillWrapper}>
                   <View style={styles.actionPillContainer}>
                     <TouchableOpacity
@@ -500,7 +523,7 @@ export default function ProfileSettingsScreen() {
             <FadeIn delay={200}>
               <GlassCard className="p-8 mb-8 border-white/5">
                 <View className="gap-y-10">
-                  {/* Full name input */}
+                  {/* Full name input (FIXED: Precise vertical centering) */}
                   <View>
                     <View className="flex-row items-center mb-4 ml-1">
                       <User size={14} color="#00F0FF" />
@@ -508,13 +531,30 @@ export default function ProfileSettingsScreen() {
                         USERNAME
                       </Text>
                     </View>
-                    <View className="justify-center h-16 px-2 py-1 border bg-black/60 border-white/15 rounded-2xl">
-                      <Input
+                    <View className="h-16 overflow-hidden border bg-black/60 border-white/15 rounded-2xl">
+                      <TextInput
                         value={fullName}
                         onChangeText={setFullName}
                         placeholder="User Name"
-                        className="text-lg font-bold text-white bg-transparent border-0"
                         placeholderTextColor="rgba(255,255,255,0.15)"
+                        autoCapitalize="words"
+                        autoCorrect={false}
+                        style={
+                          {
+                            flex: 1,
+                            height: '100%',
+                            color: '#FFFFFF',
+                            fontSize: 18,
+                            fontWeight: '700',
+                            paddingVertical: 0,
+                            margin: 0,
+                            paddingHorizontal: 16,
+                            textAlignVertical: 'center',
+                            ...(Platform.OS === 'web'
+                              ? { outlineStyle: 'none' }
+                              : {}),
+                          } as any
+                        }
                       />
                     </View>
                   </View>
@@ -593,8 +633,6 @@ export default function ProfileSettingsScreen() {
 }
 
 // ─── LOCAL STYLESHEET ────────────────────────────────────────────────────────
-// Native StyleSheet for components that require precise layout control
-// beyond what NativeWind provides reliably across web and APK.
 const styles = StyleSheet.create({
   actionPillWrapper: {
     flexDirection: 'row',

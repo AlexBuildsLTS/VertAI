@@ -401,12 +401,13 @@ Change the color or size properties here to modify the background. */}
       <View className="flex-1 w-full" style={{ flex: 1 }}>
         <ScrollView
           style={{ flex: 1, width: '100%' }}
+          keyboardShouldPersistTaps="handled" // Keep this one!
           contentContainerStyle={{
             padding: isMobile ? 16 : 60,
             paddingTop: isMobile ? 100 : 100,
             paddingBottom: isMobile ? 140 : 200,
             flexGrow: 1,
-            alignItems: 'center', // Centers the max-w-2xl container for Web
+            alignItems: 'center',
           }}
           showsVerticalScrollIndicator={false}
         >
@@ -452,6 +453,7 @@ Change the color or size properties here to modify the background. */}
                       }
                     }}
                     activeOpacity={0.8}
+                    delayPressIn={0}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <GlassCard

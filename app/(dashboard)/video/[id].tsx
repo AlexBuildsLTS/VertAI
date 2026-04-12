@@ -183,7 +183,12 @@ const ExportControlMatrix = React.memo(
     return (
       <Animated.View
         entering={FadeInDown.duration(600).springify()}
-        className="z-20 w-full mb-10 md:mb-12"
+        style={{ 
+          zIndex: 30, 
+          width: '100%', 
+          marginBottom: 32, // Enforced spacing for Web
+          paddingBottom: 16  // Extra breathing room
+        }}
       >
         <ScrollView
           horizontal={isMobile}
@@ -294,7 +299,7 @@ const ProportionalChapterTimeline = ({
               zIndex: isOpen ? 50 : i, // FIX: Pops the opened chapter over the others
             }}
           >
-            <View style={{ width: 38, alignItems: 'flex-end', paddingTop: 2 }}>
+            <View style={{ width: 28, alignItems: 'flex-end', paddingTop: 2 }}>
               {ch.timestamp ? (
                 <Text
                   style={{
@@ -340,7 +345,7 @@ const ProportionalChapterTimeline = ({
               <Text
                 style={{
                   color: isOpen ? CYAN : 'rgba(255,255,255,0.9)',
-                  fontSize: 14,
+                  fontSize: 12,
                   fontWeight: '800',
                   marginBottom: 4,
                 }}
@@ -376,7 +381,7 @@ const MobileChapterTimeline = ({
   const [openIdx, setOpenIdx] = useState<number | null>(null);
 
   return (
-    <View className="pb-4 pl-2 ml-2 border-l-2 border-purple-500/20">
+    <View className="pb-4 pl-6 ml-6 border-l-2 border-purple-500/20">
       {chapters.map((ch, i) => {
         const isOpen = openIdx === i;
         return (

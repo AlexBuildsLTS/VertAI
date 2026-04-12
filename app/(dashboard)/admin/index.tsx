@@ -500,7 +500,7 @@ export default function AdminCommandCenter() {
             <View
               style={{
                 alignSelf: 'flex-start',
-                shadowColor:
+                boxShadow:
                   healthStatus === 'OPERATIONAL'
                     ? THEME.success
                     : THEME.warning,
