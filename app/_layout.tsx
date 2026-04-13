@@ -1,8 +1,7 @@
 /**
  * app/_layout.tsx
  * ══════════════════════════════════════════════════════════════════════════════
- * Root routing topology, global provider wrapper, and Premium Splash Handoff.
- * Uses expo-image to render a transparent SVG/GIF over the dark theme.
+ * Root routing, global provider wrapper, and Splash Handoff
  */
 import '../lib/polyfill';
 import 'react-native-gesture-handler';
@@ -15,7 +14,6 @@ import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useColorScheme } from 'nativewind';
 import * as SplashScreen from 'expo-splash-screen';
-import { Image } from 'expo-image';
 import { useAuthStore } from '../store/useAuthStore';
 import { ThemeProvider, DarkTheme } from '@react-navigation/native';
 import { ProcessingLoader } from '../components/ui/ProcessingLoader';
@@ -42,6 +40,9 @@ export default function RootLayout() {
   const segments = useSegments();
   const router = useRouter();
 
+  // Track if we've done the initial route to prevent interrupting local animations
+  const initialRouteExecuted = useRef(false);
+
   // Query Client
   const [queryClient] = useState(() => new QueryClient());
 
@@ -63,15 +64,21 @@ export default function RootLayout() {
   useEffect(() => {
     if (isLoading) return;
 
-    // hide the static PNG & The transparent SVG shows
     SplashScreen.hideAsync().catch(() => {});
 
     const inAuthGroup = segments[0] === '(auth)';
 
-    if (session && inAuthGroup) {
-      router.replace('/(dashboard)');
-    } else if (!session && !inAuthGroup) {
-      router.replace('/(auth)/sign-in');
+    if (!initialRouteExecuted.current) {
+      if (session && inAuthGroup) {
+        router.replace('/(dashboard)');
+      } else if (!session && !inAuthGroup) {
+        router.replace('/(auth)/sign-in');
+      }
+      initialRouteExecuted.current = true;
+    } else {
+      if (!session && !inAuthGroup) {
+        router.replace('/(auth)/sign-in');
+      }
     }
   }, [session, isLoading, segments, router]);
 
@@ -83,20 +90,18 @@ export default function RootLayout() {
     }
 
     if (!isLoading) {
-      // Let the SVG/GIF play for 1.5 seconds, then fade it out
       setTimeout(() => {
         Animated.timing(fadeAnim, {
-          toValue: 0, // Fade opacity to 0
-          duration: 300, // Buttery smooth half-second fade
+          toValue: 0,
+          duration: 300,
           useNativeDriver: true,
         }).start(() => {
-          setSplashFinished(true); // Unmount overlay
+          setSplashFinished(true);
         });
       }, 1500);
     }
   }, [isLoading]);
 
-  // Prevent rendering the actual UI tree until Auth is resolved
   if (isLoading && Platform.OS === 'web') {
     return <View style={{ flex: 1, backgroundColor: '#020205' }} />;
   }
@@ -107,18 +112,18 @@ export default function RootLayout() {
         <StatusBar style="light" />
 
         <View style={{ flex: 1, backgroundColor: '#020205' }}>
-          {/* YOUR ACTUAL APP ROUTING */}
           <Stack
             screenOptions={{
               headerShown: false,
               contentStyle: { backgroundColor: '#020205' },
+              // CRITICAL UX FIX: 'slide_from_right' prevents the black opacity blink
+              animation: 'slide_from_right',
             }}
           >
-            <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
-            <Stack.Screen name="(dashboard)" options={{ animation: 'fade' }} />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(dashboard)" />
           </Stack>
 
-          {/* THE TRANSPARENT SVG OVERLAY (Native Only) */}
           {Platform.OS !== 'web' && !splashFinished && (
             <Animated.View
               style={[styles.splashOverlay, { opacity: fadeAnim }]}
@@ -135,7 +140,7 @@ export default function RootLayout() {
 
 const styles = StyleSheet.create({
   splashOverlay: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#020205',
     zIndex: 99999,
     alignItems: 'center',

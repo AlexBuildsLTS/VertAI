@@ -1,6 +1,6 @@
 /**
  * store/useAuthStore.ts
- * VerbumAI - Authentication State Manager
+ * VeraxAI - Authentication State Manager
  * WEB / APK
  */
 
@@ -12,11 +12,11 @@ import { Platform } from 'react-native';
 
 /**
  * [CRITICAL ROUTER LOCK]
- * When 'Confirm Email' is disabled in Supabase, signing up auto-triggers a SIGNED_IN event.
- * This lock blinds the store from broadcasting that temporary session to Expo Router,
- * preventing the "black screen blink" layout crash on Web.
+ * Temporarily blinds the global store from broadcasting session changes to Expo Router.
+ * This provides the UI (sign-in.tsx) exactly enough time to play smooth success
+ * animations (Checkmarks, etc.) without the layout violently unmounting them.
  */
-let isRegisteringLock = false;
+let authUIRoutingLock = false;
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 
@@ -31,7 +31,7 @@ interface AuthState {
   signInWithPassword: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
-  refreshProfile: (retryCount?: number) => Promise<void>;
+  refreshProfile: (targetUserId?: string | number, currentRetry?: number) => Promise<void>;
   initialize: () => () => void;
   clearError: () => void;
 }
@@ -78,12 +78,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   /**
    * Email/password sign-in.
-   * CRITICAL APK FIX: A 3-second hard timeout guarantees isLoading becomes false
-   * even if refreshProfile loops or hangs — preventing infinite splash on Android.
+   * FIX: Removed 'await' on profile fetch & added UI lock so the button animation can play!
    */
   signInWithPassword: async (email: string, password: string) => {
-    set({ isLoading: true, error: null });
-    if (__DEV__) console.log(`[Auth Store] 🔐 Attempting sign -in: ${email} `);
+    // Note: We DO NOT set global isLoading: true here. The local UI handles its own spinners.
+    // Setting global isLoading causes _layout.tsx to render black fallback screens.
+    set({ error: null });
+    authUIRoutingLock = true;
+
+    if (__DEV__) console.log(`[Auth Store] 🔐 Attempting sign-in: ${email}`);
 
     try {
       const safeUrl = sanitizeUrl(process.env.EXPO_PUBLIC_SUPABASE_URL);
@@ -94,36 +97,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
-      if (__DEV__) console.log(`[Auth Store] ✅ Sign -in successful: ${data.user?.email} `);
+      if (__DEV__) console.log(`[Auth Store] ✅ Sign-in successful: ${data.user?.email}`);
 
-      set({ session: data.session, user: data.user });
+      // Fetch profile asynchronously (DO NOT AWAIT).
+      get().refreshProfile(data.user?.id);
 
-      // Hard timeout: if profile fetch hangs for any reason, release the loading lock
-      // so _layout.tsx routing fires correctly on APK.
-      const profileTimeout = setTimeout(() => {
-        if (__DEV__) console.warn('[Auth Store] ⏱️ Profile timeout — forcing isLoading: false');
-        set({ isLoading: false });
-      }, 3000);
+      // Delay broadcasting the session to the Global Router by 1500ms.
+      // This perfectly syncs with the `sign-in.tsx` "Access Granted" animation.
+      setTimeout(() => {
+        set({ session: data.session, user: data.user });
+        authUIRoutingLock = false;
+      }, 1500);
 
-      await get().refreshProfile();
-      clearTimeout(profileTimeout);
-
+      // Return instantly so the UI can show the Green Checkmark!
       return { error: null };
     } catch (err: unknown) {
+      authUIRoutingLock = false;
       const mappedError = interceptAuthError(err, 'Invalid credentials.');
-      set({ error: mappedError, isLoading: false });
+      set({ error: mappedError });
       return { error: mappedError };
     }
   },
 
   /**
    * Email/password registration.
-   * Router lock prevents the auto SIGNED_IN event from routing mid-signup.
    */
   signUp: async (email: string, password: string, fullName: string) => {
-    isRegisteringLock = true;
-    set({ isLoading: true, error: null });
-    if (__DEV__) console.log(`[Auth Store] 📝 Attempting sign - up: ${email} `);
+    authUIRoutingLock = true;
+    set({ error: null });
+
+    if (__DEV__) console.log(`[Auth Store] 📝 Attempting sign-up: ${email}`);
 
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -137,22 +140,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (error) throw error;
 
-      if (__DEV__) console.log(`[Auth Store] 📬 Sign - up processed.`);
+      if (__DEV__) console.log(`[Auth Store] 📬 Sign-up processed.`);
 
-      // Purge the auto-session silently — UI is blindfolded by the lock
+      // Purge the auto-session silently
       if (data.session) {
         if (__DEV__) console.log('[Auth Store] 🛡️ Auto-session detected. Purging...');
         await supabase.auth.signOut();
       }
 
+      // Delay releasing the lock to let UI sign-up animation play
+      setTimeout(() => {
+        authUIRoutingLock = false;
+      }, 2000);
+
       return { error: null };
     } catch (err: unknown) {
+      authUIRoutingLock = false;
       const mappedError = interceptAuthError(err, 'Registration failed. Identity may already exist.');
-      set({ error: mappedError, isLoading: false });
+      set({ error: mappedError });
       return { error: mappedError };
-    } finally {
-      isRegisteringLock = false;
-      set({ session: null, user: null, isLoading: false });
     }
   },
 
@@ -169,12 +175,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   /**
    * Fetches the user profile from Supabase.
-   * CRITICAL APK FIX: Limited to 3 retries maximum. Previously looped infinitely,
-   * which kept isLoading: true forever and prevented _layout.tsx routing from firing.
+   * Supports explicit User ID to handle delayed session broadcasts.
    */
-  refreshProfile: async (retryCount = 0) => {
-    const { session } = get();
-    const userId = session?.user?.id;
+  refreshProfile: async (targetUserId?: string | number, currentRetry = 0) => {
+    const retryCount = typeof targetUserId === 'number' ? targetUserId : currentRetry;
+    const userId = (typeof targetUserId === 'string' ? targetUserId : undefined) || get().session?.user?.id;
 
     if (!userId) {
       set({ profile: null, isLoading: false });
@@ -189,7 +194,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .maybeSingle();
 
       if (error) {
-        if (__DEV__) console.warn(`[Auth Kernel] ⚠️ Sync Error: ${error.message} `);
+        if (__DEV__) console.warn(`[Auth Kernel] ⚠️ Sync Error: ${error.message}`);
         set({ error: interceptAuthError(error, 'Profile sync failed.'), isLoading: false });
         return;
       }
@@ -197,11 +202,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (data) {
         set({ profile: data as Profile, error: null, isLoading: false });
       } else if (retryCount < 3) {
-        // Profile may not have propagated yet — retry with backoff
         if (__DEV__) console.log(`[Auth Kernel] ⏳ Profile propagating, retry ${retryCount + 1}/3...`);
-        setTimeout(() => get().refreshProfile(retryCount + 1), 1000);
+        setTimeout(() => get().refreshProfile(targetUserId, retryCount + 1), 1000);
       } else {
-        // Profile never arrived — let the user in anyway, profile is non-critical for routing
         if (__DEV__) console.warn('[Auth Kernel] ⚠️ Profile not found after 3 retries. Proceeding.');
         set({ isLoading: false });
       }
@@ -213,8 +216,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   /**
    * Bootstraps the auth session on app launch.
-   * Reads persisted session from SecureStore (native) or localStorage (web),
-   * then subscribes to all future auth state changes.
    */
   initialize: () => {
     if (__DEV__) console.log('[Auth Kernel] 🚀 Initializing Auth Matrix...');
@@ -237,9 +238,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // Blind the store during signup to prevent premature routing
-      if (isRegisteringLock) {
-        if (__DEV__) console.log(`[Auth Kernel] 🔒 Ignoring event during signup lock: ${event}`);
+      // Blind the store during UI animations to prevent premature layout unmounting
+      if (authUIRoutingLock) {
+        if (__DEV__) console.log(`[Auth Kernel] 🔒 Ignoring event ${event} to protect UI animations.`);
         return;
       }
 

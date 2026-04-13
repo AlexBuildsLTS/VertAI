@@ -1,8 +1,8 @@
 /**
  * app/(dashboard)/admin/keys.tsx
- * VeraxAI — Enterprise API Key Vault & Telemetry Analytics
+ * VeraxAI — API Keys & Telemetry Analytics
  * ----------------------------------------------------------------------------
- *  MULTI-LINE SVG ENGINE: Custom-built 7D velocity chart using raw SVGs
+ *  MULTI-LINE SVG PROCESSOR ENGINE Custom-built 7D velocity chart using raw SVGs
  *  TIMELINES: Generates rigid 7-day/12-month frames to prevent layout collapse.
  * ----------------------------------------------------------------------------
  */
