@@ -1,13 +1,13 @@
 /**
  * app/(dashboard)/admin/keys.tsx
- * VeraxAI — Enterprise API Key Vault & Token Analytics
+ * VeraxAI — Enterprise API Key Vault & Telemetry Analytics
  * ----------------------------------------------------------------------------
- * This dashboard allows Root Admins to securely inject fallback API keys into
- * the database, monitor their health, and visualize daily AI token expenditure.
+ *  MULTI-LINE SVG ENGINE: Custom-built 7D velocity chart using raw SVGs
+ *  TIMELINES: Generates rigid 7-day/12-month frames to prevent layout collapse.
  * ----------------------------------------------------------------------------
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Image,
+  Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,21 +31,47 @@ import {
   Trash2,
   ShieldCheck,
   RefreshCcw,
+  BarChart2,
 } from 'lucide-react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { supabase } from '../../../lib/supabase/client';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { FadeIn } from '../../../components/animations/FadeIn';
 
-// ─── THEME CONSTANTS ───
+// ─── THEME & COLOR GENERATION ────────────────────────────────────────────────
 const THEME = {
   obsidian: '#000012',
   cyan: '#00F0FF',
   danger: '#FF007F',
   success: '#32FF00',
+  purple: '#8A2BE2',
   slate: '#94a3b8',
 };
 
-// ─── STRICT INPUT FIX FOR ANDROID ───
+const CHART_COLORS = [
+  THEME.cyan,
+  THEME.danger,
+  THEME.success,
+  THEME.purple,
+  '#F59E0B',
+  '#3B82F6',
+  '#EC4899',
+];
+
+const getColorForKey = (keyName: string) => {
+  if (keyName === 'ENV_MASTER') return THEME.cyan;
+  let hash = 0;
+  for (let i = 0; i < keyName.length; i++)
+    hash = keyName.charCodeAt(i) + ((hash << 5) - hash);
+  return CHART_COLORS[Math.abs(hash) % CHART_COLORS.length];
+};
+
 const strictInputStyle = {
   flex: 1,
   color: '#FFFFFF',
@@ -55,7 +82,7 @@ const strictInputStyle = {
   ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
 } as any;
 
-// ─── TYPES ───
+// ─── TYPE DEFINITIONS ────────────────────────────────────────────────────────
 type SystemKey = {
   id: string;
   name: string;
@@ -63,23 +90,296 @@ type SystemKey = {
   status: string;
   tokens_burned: number;
 };
-
-type DailyUsage = {
-  usage_date: string;
+type RawUsage = {
+  usage_date?: string;
+  usage_month?: string;
+  api_key_name: string;
   total_tokens: number;
-  total_requests: number;
 };
 
+type ChartDataPoint = {
+  label: string;
+  fullDate: string;
+  total: number;
+  breakdown: { keyName: string; tokens: number; color: string }[];
+};
+
+// ─── FIXED TIMELINE GENERATORS ───────────────────────────────────────────────
+// Forces exactly 7 days, ending today.
+const generateLast7Days = () => {
+  const dates = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().split('T')[0]);
+  }
+  return dates;
+};
+
+// Forces exactly 12 months, ending this month.
+const generateLast12Months = () => {
+  const monthsArr = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const dates = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - i);
+    dates.push(`${monthsArr[d.getMonth()]} ${d.getFullYear()}`);
+  }
+  return dates;
+};
+
+// ─── CUSTOM SVG MULTI-LINE CHART (7D VELOCITY) ───────────────────────────────
+const SvgMultiLineChart = ({
+  data,
+  allUniqueKeys,
+  hiddenKeys,
+  selectedIndex,
+  setSelectedIndex,
+}: {
+  data: ChartDataPoint[];
+  allUniqueKeys: Set<string>;
+  hiddenKeys: Set<string>;
+  selectedIndex: number;
+  setSelectedIndex: (idx: number) => void;
+}) => {
+  const VIEWBOX_W = 1000;
+  const VIEWBOX_H = 200;
+  const PADDING_Y = 20;
+  const PADDING_X = 20; // Keeps dots from clipping the edges
+
+  const activeKeys = Array.from(allUniqueKeys).filter(
+    (k) => !hiddenKeys.has(k),
+  );
+
+  // Find the absolute maximum token value across any single key on any day for scaling
+  const maxVal = Math.max(
+    ...data.map((d) =>
+      Math.max(
+        ...d.breakdown
+          .filter((b) => !hiddenKeys.has(b.keyName))
+          .map((b) => b.tokens),
+        0,
+      ),
+    ),
+    10, // Fallback max to prevent division by zero
+  );
+
+  return (
+    <View className="relative w-full h-full">
+      {/* Background Grid Lines */}
+      <View className="absolute inset-0 flex-col justify-between py-[10%]">
+        <View className="w-full h-px bg-white/5" />
+        <View className="w-full h-px bg-white/5" />
+        <View className="w-full h-px bg-white/5" />
+      </View>
+
+      {/* Scalable SVG Render Engine */}
+      <View className="absolute inset-0 pointer-events-none">
+        <Svg
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
+          preserveAspectRatio="none"
+        >
+          {activeKeys.map((keyName, keyIdx) => {
+            const color = getColorForKey(keyName);
+
+            // Calculate coordinates
+            const points = data.map((d, i) => {
+              const b = d.breakdown.find((x) => x.keyName === keyName);
+              const val = b ? b.tokens : 0;
+              const x = PADDING_X + (i / 6) * (VIEWBOX_W - PADDING_X * 2);
+              const y =
+                VIEWBOX_H -
+                PADDING_Y -
+                (val / maxVal) * (VIEWBOX_H - PADDING_Y * 2);
+              return { x, y, val };
+            });
+
+            // SVG Path String
+            const dStr = `M ${points.map((p) => `${p.x},${p.y}`).join(' L ')}`;
+
+            return (
+              <React.Fragment key={keyName}>
+                {/* The main connecting line */}
+                <Path
+                  d={dStr}
+                  stroke={color}
+                  strokeWidth={3}
+                  fill="none"
+                  opacity={0.8}
+                />
+
+                {/* The data points (Dots) */}
+                {points.map((p, i) => (
+                  <Circle
+                    key={`dot-${keyIdx}-${i}`}
+                    cx={p.x}
+                    cy={p.y}
+                    r={i === selectedIndex ? 6 : 4}
+                    fill={THEME.obsidian}
+                    stroke={color}
+                    strokeWidth={2}
+                    opacity={p.val > 0 || i === selectedIndex ? 1 : 0} // Hide 0-value dots unless hovered
+                  />
+                ))}
+              </React.Fragment>
+            );
+          })}
+        </Svg>
+      </View>
+
+      {/* Interactive Hover Columns Overlay */}
+      <View className="absolute inset-0 flex-row">
+        {data.map((point, idx) => {
+          const hoverProps = Platform.select({
+            web: { onMouseEnter: () => setSelectedIndex(idx) },
+            default: { onPress: () => setSelectedIndex(idx) },
+          });
+
+          const isSelected = selectedIndex === idx;
+
+          return (
+            <Pressable
+              key={idx}
+              {...hoverProps}
+              className="items-center justify-end flex-1 h-full"
+            >
+              {/* Highlight bar to show which column is active */}
+              <View
+                className={`w-full h-full bg-white transition-opacity duration-200 ${isSelected ? 'opacity-5' : 'opacity-0'}`}
+              />
+              <Text
+                className={`absolute bottom-[-24px] text-[9px] uppercase tracking-wider ${isSelected ? 'text-white font-bold' : 'text-white/30'}`}
+              >
+                {point.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
+// ─── CUSTOM REANIMATED STACKED BAR (12M VOLUME) ──────────────────────────────
+const AnimatedStackedBar = ({
+  dataPoint,
+  maxVisibleTotal,
+  maxHeight,
+  isSelected,
+  onInteract,
+  hiddenKeys,
+}: {
+  dataPoint: ChartDataPoint;
+  maxVisibleTotal: number;
+  maxHeight: number;
+  isSelected: boolean;
+  onInteract: () => void;
+  hiddenKeys: Set<string>;
+}) => {
+  const visibleTotal = useMemo(() => {
+    return dataPoint.breakdown.reduce(
+      (sum, b) => (hiddenKeys.has(b.keyName) ? sum : sum + b.tokens),
+      0,
+    );
+  }, [dataPoint, hiddenKeys]);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    const targetHeight =
+      maxVisibleTotal > 0 ? (visibleTotal / maxVisibleTotal) * maxHeight : 0;
+    const finalHeight = Math.max(targetHeight, visibleTotal > 0 ? 4 : 0);
+    return {
+      height: withSpring(finalHeight, { damping: 15, stiffness: 90 }),
+      opacity: withTiming(isSelected ? 1 : 0.6, { duration: 150 }),
+    };
+  });
+
+  const hoverProps = Platform.select({
+    web: { onMouseEnter: onInteract },
+    default: { onPress: onInteract },
+  });
+
+  return (
+    <View className="items-center justify-end flex-1 h-full mx-1 max-w-[40px]">
+      <Pressable
+        {...hoverProps}
+        className="items-center justify-end w-full h-full group"
+      >
+        <View className="absolute bottom-0 w-full h-full bg-white/[0.02] rounded-md border border-white/[0.05]" />
+        <Animated.View
+          style={[
+            animatedStyle,
+            {
+              width: '100%',
+              borderRadius: 6,
+              overflow: 'hidden',
+              justifyContent: 'flex-end',
+              zIndex: 10,
+            },
+          ]}
+        >
+          {dataPoint.breakdown.map((segment, idx) => {
+            const isHidden = hiddenKeys.has(segment.keyName);
+            const segmentHeightPct =
+              isHidden || visibleTotal === 0
+                ? 0
+                : (segment.tokens / visibleTotal) * 100;
+            return (
+              <Animated.View
+                key={idx}
+                style={useAnimatedStyle(() => ({
+                  height: withSpring(`${segmentHeightPct}%`),
+                  width: '100%',
+                  backgroundColor: segment.color,
+                  opacity: withTiming(isHidden ? 0 : 1),
+                }))}
+              />
+            );
+          })}
+        </Animated.View>
+        <Text
+          className={`text-[8px] md:text-[10px] uppercase tracking-wider mt-4 ${isSelected ? 'text-white font-bold' : 'text-white/30'}`}
+          numberOfLines={1}
+        >
+          {dataPoint.label}
+        </Text>
+      </Pressable>
+    </View>
+  );
+};
+
+// ─── MAIN DASHBOARD COMPONENT ────────────────────────────────────────────────
 export default function ApiKeysDashboard() {
   const router = useRouter();
   const { width: SCREEN_WIDTH } = Dimensions.get('window');
   const isMobile = SCREEN_WIDTH < 768;
 
   const [keys, setKeys] = useState<SystemKey[]>([]);
-  const [chartData, setChartData] = useState<DailyUsage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Form State
+  const [dailyData, setDailyData] = useState<ChartDataPoint[]>([]);
+  const [monthlyData, setMonthlyData] = useState<ChartDataPoint[]>([]);
+  const [allUniqueKeys, setAllUniqueKeys] = useState<Set<string>>(new Set());
+
+  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
+
+  const [selectedDailyIdx, setSelectedDailyIdx] = useState<number>(6); // Default to today
+  const [selectedMonthlyIdx, setSelectedMonthlyIdx] = useState<number>(11); // Default to this month
+
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyValue, setNewKeyValue] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -95,35 +395,114 @@ export default function ApiKeysDashboard() {
         .from('system_api_keys')
         .select('*')
         .order('created_at', { ascending: true });
-
       if (keyError) throw keyError;
       if (keyData) setKeys(keyData as SystemKey[]);
 
-      const { data: usageData, error: usageError } = await supabase.rpc(
-        'get_daily_token_usage',
-        { days_back: 7 },
+      const { data: rawDaily, error: dailyError } = await supabase.rpc(
+        'get_daily_usage_by_key',
+        { days_back: 6 },
       );
+      if (dailyError) throw dailyError;
+      setDailyData(processDailyTimeline(rawDaily as RawUsage[]));
 
-      if (usageError) throw usageError;
-      if (usageData) setChartData(usageData as DailyUsage[]);
+      const { data: rawMonthly, error: monthlyError } = await supabase.rpc(
+        'get_monthly_usage_by_key',
+        { months_back: 11 },
+      );
+      if (monthlyError) throw monthlyError;
+      setMonthlyData(processMonthlyTimeline(rawMonthly as RawUsage[]));
+
+      const unique = new Set<string>();
+      rawDaily?.forEach((r) => unique.add(r.api_key_name));
+      rawMonthly?.forEach((r) => unique.add(r.api_key_name));
+      setAllUniqueKeys(unique);
+
+      // Default HUD to the right-most (latest) values
+      setSelectedDailyIdx(6);
+      setSelectedMonthlyIdx(11);
     } catch (err: any) {
-      console.error('[Admin API Vault Error]', err);
-      Alert.alert('System Error', err.message);
+      console.error('[Admin Analytics Error]', err);
+      Alert.alert('Telemetry Sync Error', err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAddKey = async () => {
-    if (!newKeyName || newKeyValue.length < 10) {
-      Alert.alert('Protocol Error', 'Valid alias and API key required.');
-      return;
-    }
+  // Inject empty days to guarantee 7 slots
+  const processDailyTimeline = (dbData: RawUsage[]): ChartDataPoint[] => {
+    const timeline = generateLast7Days();
+    return timeline.map((dateStr) => {
+      const matchedRows = dbData.filter((r) => r.usage_date === dateStr);
+      let total = 0;
+      const breakdown = matchedRows.map((row) => {
+        const tokens = Number(row.total_tokens);
+        total += tokens;
+        return {
+          keyName: row.api_key_name,
+          tokens,
+          color: getColorForKey(row.api_key_name),
+        };
+      });
+      return {
+        label: new Date(dateStr).toLocaleDateString('en-US', {
+          weekday: 'short',
+        }),
+        fullDate: dateStr,
+        total,
+        breakdown,
+      };
+    });
+  };
 
+  // Inject empty months to guarantee 12 slots
+  const processMonthlyTimeline = (dbData: RawUsage[]): ChartDataPoint[] => {
+    const timeline = generateLast12Months();
+    return timeline.map((monthStr) => {
+      const matchedRows = dbData.filter((r) => r.usage_month === monthStr);
+      let total = 0;
+      const breakdown = matchedRows.map((row) => {
+        const tokens = Number(row.total_tokens);
+        total += tokens;
+        return {
+          keyName: row.api_key_name,
+          tokens,
+          color: getColorForKey(row.api_key_name),
+        };
+      });
+      return {
+        label: monthStr.split(' ')[0],
+        fullDate: monthStr,
+        total,
+        breakdown,
+      };
+    });
+  };
+
+  const toggleKeyVisibility = (keyName: string) => {
+    setHiddenKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(keyName)) next.delete(keyName);
+      else next.add(keyName);
+      return next;
+    });
+  };
+
+  const maxMonthly = Math.max(
+    ...monthlyData.map((d) =>
+      d.breakdown.reduce(
+        (sum, b) => (hiddenKeys.has(b.keyName) ? sum : sum + b.tokens),
+        0,
+      ),
+    ),
+    1,
+  );
+
+  const handleAddKey = async () => {
+    if (!newKeyName || newKeyValue.length < 10)
+      return Alert.alert('Protocol Error', 'Valid alias and API key required.');
     setIsAdding(true);
     try {
       const preview = `...${newKeyValue.slice(-6)}`;
-
       const { error } = await supabase.from('system_api_keys').insert({
         name: newKeyName,
         encrypted_key: newKeyValue,
@@ -131,9 +510,7 @@ export default function ApiKeysDashboard() {
         status: 'active',
         tokens_burned: 0,
       });
-
       if (error) throw error;
-
       setNewKeyName('');
       setNewKeyValue('');
       fetchDashboardData();
@@ -157,11 +534,36 @@ export default function ApiKeysDashboard() {
     }
   };
 
-  // Safe fallback to 1 to avoid division by zero
-  const maxTokens = Math.max(
-    ...chartData.map((d) => Number(d.total_tokens)),
-    1,
+  const ChartLegend = () => (
+    <View className="flex-row flex-wrap items-center gap-4 pt-6 mt-6 border-t border-white/5">
+      {Array.from(allUniqueKeys).map((keyName) => {
+        const isHidden = hiddenKeys.has(keyName);
+        return (
+          <TouchableOpacity
+            key={keyName}
+            onPress={() => toggleKeyVisibility(keyName)}
+            activeOpacity={0.7}
+            className={`flex-row items-center gap-2 px-3 py-1.5 rounded-full border transition-colors ${isHidden ? 'border-white/10 bg-white/5' : 'border-white/20 bg-white/10'}`}
+          >
+            <View
+              style={{
+                backgroundColor: isHidden ? '#333' : getColorForKey(keyName),
+              }}
+              className="w-2.5 h-2.5 rounded-full shadow-[0_0_8px] shadow-black"
+            />
+            <Text
+              className={`text-xs font-mono transition-opacity ${isHidden ? 'text-white/30 line-through' : 'text-white/90'}`}
+            >
+              {keyName}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
   );
+
+  const activeDailyPoint = dailyData[selectedDailyIdx];
+  const activeMonthlyPoint = monthlyData[selectedMonthlyIdx];
 
   return (
     <SafeAreaView className="flex-1 bg-[#000012]">
@@ -182,22 +584,18 @@ export default function ApiKeysDashboard() {
             width: '100%',
           }}
         >
-          {/* ─── NEW FLUID IMAGE HEADER (Perfectly Centered) ─── */}
+          {/* ─── HEADER ─── */}
           <FadeIn delay={100} className="w-full mb-10">
             <View className="relative flex-row items-center justify-center w-full h-16 mb-2">
-              {/* Back Button (Absolute Left) */}
               <TouchableOpacity
                 onPress={() => router.replace('/admin')}
                 className="absolute left-0 z-50 flex-row items-center py-2 gap-x-2 active:scale-95"
-                activeOpacity={0.7}
               >
                 <ArrowBigLeftDash size={20} color={THEME.cyan} />
                 <Text className="text-[11px] font-black tracking-[4px] text-[#00F0FF] uppercase hidden md:flex">
                   RETURN
                 </Text>
               </TouchableOpacity>
-
-              {/* Center Image Icon */}
               <View className="items-center justify-center pointer-events-none">
                 <Image
                   source={require('../../../assets/api128.png')}
@@ -205,20 +603,16 @@ export default function ApiKeysDashboard() {
                   resizeMode="contain"
                 />
               </View>
-
-              {/* Refresh Button (Absolute Right) */}
               <TouchableOpacity
-                onPress={() => fetchDashboardData()}
+                onPress={fetchDashboardData}
                 className="absolute right-0 z-50 items-center justify-center w-10 h-10 border rounded-2xl bg-[#00F0FF]/10 border-[#00F0FF]/20 active:scale-95"
               >
                 <RefreshCcw size={16} color={THEME.cyan} />
               </TouchableOpacity>
             </View>
-
-            {/* Active Nodes Subtitle */}
             <View className="items-center justify-center w-full mt-2">
-              <Text className="text-[9px] md:text-[12px] font-bold text-green-400/40 uppercase tracking-[2px]">
-                {keys.length} API KEYS
+              <Text className="text-[9px] md:text-[12px] font-bold text-[#00F0FF]/60 uppercase tracking-[2px]">
+                {keys.length} FALLBACK NODES
               </Text>
             </View>
           </FadeIn>
@@ -231,61 +625,140 @@ export default function ApiKeysDashboard() {
             />
           ) : (
             <>
-              {/* ─── MODULE 1: TOKEN BURN CHART ─── */}
+              {/* ─── MODULE 1: DAILY VELOCITY CHART (MULTI-LINE SVG) ─── */}
               <FadeIn delay={200}>
                 <GlassCard className="p-6 md:p-8 mb-8 border bg-white/[0.015] border-white/5 rounded-3xl md:rounded-[32px]">
                   <View className="flex-row items-center justify-between mb-8">
                     <View className="flex-row items-center gap-x-3">
                       <Activity size={24} color={THEME.danger} />
                       <Text className="text-base font-black tracking-widest text-white uppercase">
-                        Token Burn (7 Days)
+                        Network Velocity (7D)
                       </Text>
                     </View>
                   </View>
 
-                  {/* FIXED CHART: justify-around prevents crushing, specific widths preserve the bars */}
-                  <View className="flex-row items-end justify-around h-48 pb-2 border-b border-white/10">
-                    {chartData.map((data, idx) => {
-                      const tokenCount = Number(data.total_tokens);
-                      // Max bar height is 140px inside the 192px container to leave room for the tooltip
-                      const calculatedHeight =
-                        maxTokens > 0 ? (tokenCount / maxTokens) * 140 : 0;
-                      const finalHeight = Math.max(
-                        calculatedHeight,
-                        tokenCount > 0 ? 4 : 0,
-                      );
-                      const dayName = new Date(
-                        data.usage_date,
-                      ).toLocaleDateString('en-US', { weekday: 'short' });
+                  {/* SVG Render Area */}
+                  <View className="h-56 pb-8 md:h-64">
+                    {dailyData.length > 0 && (
+                      <SvgMultiLineChart
+                        data={dailyData}
+                        allUniqueKeys={allUniqueKeys}
+                        hiddenKeys={hiddenKeys}
+                        selectedIndex={selectedDailyIdx}
+                        setSelectedIndex={setSelectedDailyIdx}
+                      />
+                    )}
+                  </View>
 
-                      return (
-                        <View key={idx} className="items-center w-10 md:w-16">
-                          <View className="items-center justify-end w-full h-full group">
-                            <View
-                              className="w-5 md:w-8 bg-[#FF007F]/80 rounded-t-sm"
-                              style={{ height: finalHeight }}
-                            />
-                            {/* Tooltip Overlay */}
-                            <View className="absolute inset-0 z-10 items-center justify-end pb-8 transition-opacity opacity-0 hover:opacity-100">
-                              <View className="px-2 py-1 mb-2 border rounded pointer-events-none bg-black/90 border-white/10">
-                                <Text className="text-[9px] text-white font-mono whitespace-nowrap">
-                                  {tokenCount} T
+                  {/* Dynamic HUD */}
+                  <View className="justify-end h-28">
+                    {activeDailyPoint && activeDailyPoint.total > 0 ? (
+                      <View className="p-4 mt-6 border border-white/10 rounded-2xl bg-white/5">
+                        <Text className="text-[#00F0FF] text-[10px] font-black uppercase tracking-widest mb-3">
+                          Token Burn: {activeDailyPoint.fullDate}
+                        </Text>
+                        <View className="flex-row flex-wrap gap-x-6 gap-y-2">
+                          {activeDailyPoint.breakdown
+                            .filter((b) => !hiddenKeys.has(b.keyName))
+                            .map((b, idx) => (
+                              <View
+                                key={idx}
+                                className="flex-row items-center gap-x-2"
+                              >
+                                <View
+                                  style={{ backgroundColor: b.color }}
+                                  className="w-2.5 h-2.5 rounded-full"
+                                />
+                                <Text className="font-mono text-xs text-white/70">
+                                  {b.keyName}:
+                                </Text>
+                                <Text className="text-xs font-bold tracking-widest text-white">
+                                  {b.tokens.toLocaleString()}
                                 </Text>
                               </View>
-                            </View>
-                          </View>
-                          <Text className="text-[9px] text-white/40 mt-3 uppercase tracking-wider">
-                            {dayName}
-                          </Text>
+                            ))}
                         </View>
-                      );
-                    })}
+                      </View>
+                    ) : (
+                      <View className="items-center justify-center p-4 mt-6 bg-transparent border border-transparent rounded-2xl">
+                        <Text className="font-mono text-xs tracking-widest uppercase text-white/20">
+                          No telemetry for this date
+                        </Text>
+                      </View>
+                    )}
                   </View>
+                  <ChartLegend />
                 </GlassCard>
               </FadeIn>
 
-              {/* ─── MODULE 2: SYSTEM FALLBACK KEYS ─── */}
+              {/* ─── MODULE 2: MONTHLY VOLUME CHART (STACKED BARS) ─── */}
               <FadeIn delay={300}>
+                <GlassCard className="p-6 md:p-8 mb-8 border bg-white/[0.015] border-white/5 rounded-3xl md:rounded-[32px]">
+                  <View className="flex-row items-center justify-between mb-8">
+                    <View className="flex-row items-center gap-x-3">
+                      <BarChart2 size={24} color={THEME.purple} />
+                      <Text className="text-base font-black tracking-widest text-white uppercase">
+                        Volume Aggregation (12M)
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View className="flex-row items-end justify-between h-56 px-1 pb-8 md:h-64 md:px-4">
+                    {monthlyData.map((point, idx) => (
+                      <AnimatedStackedBar
+                        key={`monthly-${idx}`}
+                        dataPoint={point}
+                        maxVisibleTotal={maxMonthly}
+                        maxHeight={180}
+                        isSelected={selectedMonthlyIdx === idx}
+                        onInteract={() => setSelectedMonthlyIdx(idx)}
+                        hiddenKeys={hiddenKeys}
+                      />
+                    ))}
+                  </View>
+
+                  <View className="justify-end h-28">
+                    {activeMonthlyPoint && activeMonthlyPoint.total > 0 ? (
+                      <View className="p-4 mt-6 border border-white/10 rounded-2xl bg-white/5">
+                        <Text className="text-[#8A2BE2] text-[10px] font-black uppercase tracking-widest mb-3">
+                          Total Volume: {activeMonthlyPoint.fullDate}
+                        </Text>
+                        <View className="flex-row flex-wrap gap-x-6 gap-y-2">
+                          {activeMonthlyPoint.breakdown
+                            .filter((b) => !hiddenKeys.has(b.keyName))
+                            .map((b, idx) => (
+                              <View
+                                key={idx}
+                                className="flex-row items-center gap-x-2"
+                              >
+                                <View
+                                  style={{ backgroundColor: b.color }}
+                                  className="w-2.5 h-2.5 rounded-full"
+                                />
+                                <Text className="font-mono text-xs text-white/70">
+                                  {b.keyName}:
+                                </Text>
+                                <Text className="text-xs font-bold tracking-widest text-white">
+                                  {b.tokens.toLocaleString()}
+                                </Text>
+                              </View>
+                            ))}
+                        </View>
+                      </View>
+                    ) : (
+                      <View className="items-center justify-center p-4 mt-6 bg-transparent border border-transparent rounded-2xl">
+                        <Text className="font-mono text-xs tracking-widest uppercase text-white/20">
+                          No volume for this month
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <ChartLegend />
+                </GlassCard>
+              </FadeIn>
+
+              {/* ─── MODULE 3: SYSTEM FALLBACK KEYS VAULT ─── */}
+              <FadeIn delay={400}>
                 <GlassCard className="p-6 md:p-8 mb-8 border bg-white/[0.015] border-white/5 rounded-3xl md:rounded-[32px]">
                   <View className="flex-row items-center mb-8 gap-x-3">
                     <ShieldCheck size={24} color={THEME.success} />
@@ -294,7 +767,6 @@ export default function ApiKeysDashboard() {
                     </Text>
                   </View>
 
-                  {/* Add Key Form - Stacked on Mobile, Row on Desktop */}
                   <View className="z-50 flex-col gap-4 mb-10 md:flex-row">
                     <View className="flex-1 h-14 border bg-black/40 border-white/10 rounded-[20px] px-5 focus-within:border-[#00F0FF] justify-center">
                       <TextInput
@@ -303,16 +775,26 @@ export default function ApiKeysDashboard() {
                         placeholder="Alias (e.g., Gemini-Backup-1)"
                         placeholderTextColor="rgba(255,255,255,0.2)"
                         style={strictInputStyle}
+                        autoComplete="off"
+                        autoCorrect={false}
+                        spellCheck={false}
+                        textContentType="none"
+                        importantForAutofill="no"
                       />
                     </View>
                     <View className="flex-[2] h-14 border bg-black/40 border-white/10 rounded-[20px] px-5 focus-within:border-[#00F0FF] justify-center">
                       <TextInput
                         value={newKeyValue}
                         onChangeText={setNewKeyValue}
-                        secureTextEntry
+                        keyboardType="visible-password"
                         placeholder="API Key (AIzaSy...)"
                         placeholderTextColor="rgba(255,255,255,0.2)"
                         style={strictInputStyle}
+                        autoComplete="off"
+                        autoCorrect={false}
+                        spellCheck={false}
+                        textContentType="none"
+                        importantForAutofill="no"
                       />
                     </View>
                     <TouchableOpacity
@@ -333,21 +815,7 @@ export default function ApiKeysDashboard() {
                     </TouchableOpacity>
                   </View>
 
-                  {/* Active Keys List */}
                   <View className="gap-y-3">
-                    <View className="flex-row items-center hidden px-4 mb-2 md:flex">
-                      <Text className="flex-[2] text-[9px] text-white/30 tracking-[2px] uppercase">
-                        Alias
-                      </Text>
-                      <Text className="flex-[2] text-[9px] text-white/30 tracking-[2px] uppercase">
-                        Preview
-                      </Text>
-                      <Text className="flex-1 text-[9px] text-white/30 tracking-[2px] uppercase text-right">
-                        Tokens Burned
-                      </Text>
-                      <View className="w-10" />
-                    </View>
-
                     {keys.length === 0 ? (
                       <View className="items-center justify-center py-10 border border-dashed border-white/10 rounded-[20px]">
                         <Text className="text-xs tracking-widest uppercase text-white/40">
@@ -355,45 +823,51 @@ export default function ApiKeysDashboard() {
                         </Text>
                       </View>
                     ) : (
-                      keys.map((key) => (
-                        <View
-                          key={key.id}
-                          className="flex-col md:flex-row items-start md:items-center px-5 py-4 gap-y-3 md:gap-y-0 bg-black/40 border border-white/5 rounded-2xl md:rounded-[16px]"
-                        >
-                          <View className="flex-[2] flex-row items-center gap-x-3 w-full md:w-auto">
-                            <View
-                              className={`w-2 h-2 rounded-full ${key.status === 'active' ? 'bg-[#32FF00]' : 'bg-[#FF007F]'} shadow-[0_0_8px_${key.status === 'active' ? '#32FF00' : '#FF007F'}]`}
-                            />
-                            <Text className="text-sm font-black text-white md:text-xs">
-                              {key.name}
-                            </Text>
-                          </View>
-
-                          <Text className="flex-[2] text-xs font-mono text-white/50 w-full md:w-auto">
-                            {key.key_preview}
-                          </Text>
-
-                          <View className="flex-row items-start justify-between flex-1 w-full md:items-end md:w-auto md:flex-col md:justify-center">
-                            <Text className="text-[10px] text-white/30 tracking-[2px] uppercase md:hidden">
-                              Tokens:
-                            </Text>
-                            <Text className="text-[12px] md:text-[10px] font-black text-[#00F0FF] tracking-widest">
-                              {Number(key.tokens_burned || 0).toLocaleString()}
-                            </Text>
-                          </View>
-
-                          <TouchableOpacity
-                            onPress={() => handleDeleteKey(key.id)}
-                            className="absolute items-end justify-center w-10 py-2 top-4 right-4 md:relative md:top-0 md:right-0"
+                      keys.map((key) => {
+                        const keyColor = getColorForKey(key.name);
+                        return (
+                          <View
+                            key={key.id}
+                            className="flex-col md:flex-row items-start md:items-center px-5 py-4 gap-y-3 md:gap-y-0 bg-black/40 border border-white/5 rounded-2xl md:rounded-[16px]"
                           >
-                            <Trash2
-                              size={16}
-                              color={THEME.danger}
-                              opacity={0.6}
-                            />
-                          </TouchableOpacity>
-                        </View>
-                      ))
+                            <View className="flex-[2] flex-row items-center gap-x-3 w-full md:w-auto">
+                              <View
+                                className="w-2.5 h-2.5 rounded-full shadow-[0_0_8px]"
+                                style={{
+                                  backgroundColor: keyColor,
+                                  shadowColor: keyColor,
+                                }}
+                              />
+                              <Text className="text-sm font-black text-white md:text-xs">
+                                {key.name}
+                              </Text>
+                            </View>
+                            <Text className="flex-[2] text-xs font-mono text-white/50 w-full md:w-auto">
+                              {key.key_preview}
+                            </Text>
+                            <View className="flex-row items-start justify-between flex-1 w-full md:items-end md:w-auto md:flex-col md:justify-center">
+                              <Text className="text-[10px] text-white/30 tracking-[2px] uppercase md:hidden">
+                                Tokens:
+                              </Text>
+                              <Text className="text-[12px] md:text-[10px] font-black text-[#00F0FF] tracking-widest">
+                                {Number(
+                                  key.tokens_burned || 0,
+                                ).toLocaleString()}
+                              </Text>
+                            </View>
+                            <TouchableOpacity
+                              onPress={() => handleDeleteKey(key.id)}
+                              className="absolute items-end justify-center w-10 py-2 top-4 right-4 md:relative md:top-0 md:right-0"
+                            >
+                              <Trash2
+                                size={16}
+                                color={THEME.danger}
+                                opacity={0.6}
+                              />
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })
                     )}
                   </View>
                 </GlassCard>

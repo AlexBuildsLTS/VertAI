@@ -8,4 +8,7 @@
 # dotenvx
 .env.keys
 .env
+
 .env.*.local
+.node_modules/
+ 

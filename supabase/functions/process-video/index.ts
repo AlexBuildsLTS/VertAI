@@ -4,14 +4,10 @@
  * ----------------------------------------------------------------------------
  * TIER PIPELINE:
  * 1. Client-provided transcript (fast path)
- * 2. Server-side native caption scraper
+ * 2. Server-side native caption scraper (Forced execution on YouTube URLs)
  * 3. Audio Resolver -> Deepgram transcription
  * 4. AI insights (Gemini 3.1 Flash-Lite)
- * 5. Finalization
- *
- * FAILURE POLICY: If all transcription tiers fail, the job is marked FAILED
- * and returns cleanly. No garbage data is ever stored. No AI is called
- * without a real transcript.
+ * 5. Finalization & JSON Metadata Telemetry (Chart tracking per key)
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -56,7 +52,6 @@ serve(async (req: Request) => {
     const video_url = body.video_url as string;
     const language = (body.language as string) || 'English';
     const difficulty = (body.difficulty as string) || 'standard';
-    const platform = (body.platform as string) || 'youtube';
 
     if (!persistentJobId || !video_url) throw new Error('MISSING_MANDATORY_PAYLOAD');
 
@@ -66,17 +61,20 @@ serve(async (req: Request) => {
     let finalTranscript = (body.transcript_text as string) ?? '';
     let rawMetadata: Record<string, unknown> = {};
     let extractionMethod = finalTranscript.length >= 100 ? 'client_fast_path' : 'unknown';
+
     const mediaId = extractYouTubeId(video_url);
 
     // ── TIER 1: SERVER-SIDE NATIVE CAPTION SCRAPER ───────────────────────────
-    if (finalTranscript.length < 100 && platform === 'youtube' && mediaId) {
+    if (finalTranscript.length < 100 && mediaId) {
       activePhase = 'scraping_engine';
       const scrapeResult = await getCaptions(mediaId);
       if (scrapeResult && scrapeResult.text.length > 100) {
         finalTranscript = sanitizeForDb(scrapeResult.text);
         rawMetadata = (scrapeResult.json as Record<string, unknown>) ?? {};
         extractionMethod = scrapeResult.method;
-        console.log(`[Tier 1] ✓ Scraped ${finalTranscript.split(/\s+/).length} words.`);
+        console.log(`[Tier 1] ✓ Scraped ${finalTranscript.split(/\s+/).length} words. Bypassing Deepgram.`);
+      } else {
+        console.log(`[Tier 1] Scraper returned insufficient data. Escalating to Audio Engine.`);
       }
     }
 
@@ -146,7 +144,23 @@ serve(async (req: Request) => {
 
     if (insightError) throw new Error(`INSIGHT_DB_FAIL: ${insightError.message}`);
 
-    // ── TIER 5: FINALIZE ──────────────────────────────────────────────────────
+    // ── TIER 5: UI CHART TELEMETRY ────────────────────────────────────────────
+    activePhase = 'chart_telemetry';
+    const { data: videoData } = await supabase.from('videos').select('user_id').eq('id', persistentJobId).single();
+
+    if (videoData?.user_id) {
+      await supabase.from('usage_logs').insert({
+        user_id: videoData.user_id,
+        video_id: persistentJobId,
+        action: 'ai_insights_generated',
+        ai_model: insights.model,
+        tokens_consumed: insights.tokens_used,
+        duration_seconds: Math.floor(diffMs(pipelineStartTime) / 1000),
+        metadata: { api_key_name: insights.used_key_alias }
+      });
+    }
+
+    // ── TIER 6: FINALIZE ──────────────────────────────────────────────────────
     await broadcastStatus('completed');
     return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
 

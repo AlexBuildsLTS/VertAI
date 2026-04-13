@@ -186,8 +186,8 @@ const ExportControlMatrix = React.memo(
         style={{
           zIndex: 30,
           width: '100%',
-          marginBottom: 32, 
-          paddingBottom: 16, 
+          marginBottom: 32,
+          paddingBottom: 16,
         }}
       >
         <ScrollView

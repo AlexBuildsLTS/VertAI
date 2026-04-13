@@ -6,10 +6,9 @@
  * 1. STRICT SCHEMA ENFORCEMENT: Guarantees 100% valid JSON payload parsing.
  * 2. CASCADING HYBRID ROTATION: Prioritizes the Master Env Key, then dynamically 
  * queries the 'system_api_keys' database table for UI-injected fallback keys.
- * 3. TELEMETRY SYNC: Autonomously updates the 'tokens_burned' column via RPC 
- * if a database fallback key is utilized.
- * 4. ELITE PROMPT ENGINEERING: Forces embedded Markdown, native translation, 
- * and dynamic chapter scaling based on content duration.
+ * 3. RLS BYPASS: Uses Service Role Key to securely access the invisible API Vault.
+ * 4. SANITIZATION: Aggressively trims API keys to prevent UI whitespace crashes.
+ * 5. ADVANCED TELEMETRY: Tracks and returns the exact 'used_key_alias' for UI Charts.
  * ----------------------------------------------------------------------------
  */
 
@@ -73,6 +72,7 @@ export type InsightsResult = {
     description: string;
   };
   tokens_used: number;
+  used_key_alias: string; // <-- New telemetry hook for UI charts
 };
 
 // ─── UTILITY ENGINES ─────────────────────────────────────────────────────────
@@ -111,13 +111,13 @@ function getContentCategory(transcript: string): 'short' | 'medium' | 'long' {
 
 // ─── HYBRID KEY FETCHING ENGINE ─────────────────────────────────────────────
 
-async function getCascadingKeys(): Promise<{ id: string | null, key: string }[]> {
-  const keys: { id: string | null, key: string }[] = [];
+async function getCascadingKeys(): Promise<{ id: string | null, key: string, alias: string }[]> {
+  const keys: { id: string | null, key: string, alias: string }[] = [];
 
   // 1. Master Environment Key (Fastest, zero DB latency)
   const primary = Deno.env.get('GEMINI_API_KEY');
-  if (primary) {
-    keys.push({ id: null, key: primary });
+  if (primary && primary.trim().length > 0) {
+    keys.push({ id: null, key: primary.trim(), alias: 'ENV_MASTER' });
   }
 
   // 2. Fetch UI Fallback Keys (Wrapped in try/catch to survive DB timeouts)
@@ -125,11 +125,12 @@ async function getCascadingKeys(): Promise<{ id: string | null, key: string }[]>
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
+    // Utilize Service Role to aggressively bypass RLS shielding on the API Vault
     if (supabaseUrl && serviceKey) {
       const supabaseAdmin = createClient(supabaseUrl, serviceKey);
       const { data: dbKeys, error } = await supabaseAdmin
         .from('system_api_keys')
-        .select('id, encrypted_key')
+        .select('id, name, encrypted_key') // Fetching name for chart coloring
         .eq('status', 'active')
         .order('created_at', { ascending: true });
 
@@ -137,7 +138,10 @@ async function getCascadingKeys(): Promise<{ id: string | null, key: string }[]>
 
       if (dbKeys && dbKeys.length > 0) {
         for (const k of dbKeys) {
-          keys.push({ id: k.id, key: k.encrypted_key });
+          // Aggressive trim to prevent copy-paste whitespace errors from the UI
+          if (k.encrypted_key && k.encrypted_key.trim().length > 0) {
+            keys.push({ id: k.id, key: k.encrypted_key.trim(), alias: k.name });
+          }
         }
       }
     }
@@ -179,16 +183,17 @@ export async function generateInsights(
   // ─── CASCADING ROTATION LOOP ───
   for (let i = 0; i < apiKeys.length; i++) {
     const currentKeyObj = apiKeys[i];
-    console.log(`[Insights] Attempting generation with API Key slot #${i + 1}`);
+    console.log(`[Insights] Attempting generation with API Key alias: ${currentKeyObj.alias}`);
 
     try {
-      const genAI = new GoogleGenerativeAI(currentKeyObj.key);
+      const cleanKey = currentKeyObj.key.trim();
+      const genAI = new GoogleGenerativeAI(cleanKey);
       const model = genAI.getGenerativeModel({
         model: targetModel,
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: InsightsSchema,
-          temperature: 0.15, // Ultra-low temperature for maximum factual precision
+          temperature: 0.15,
         },
       });
 
@@ -202,9 +207,10 @@ export async function generateInsights(
       const elapsed = Date.now() - startTime;
       const tokens = result.response.usageMetadata?.totalTokenCount ?? 0;
 
-      console.log(`[Insights] ✓ Success! Generated in ${elapsed}ms using Key #${i + 1} | Tokens: ${tokens}`);
+      console.log(`[Insights] ✓ Success! Generated in ${elapsed}ms using ${currentKeyObj.alias} | Tokens: ${tokens}`);
 
-      // ─── TELEMETRY SYNC ───
+      // ─── VAULT TOTALS SYNC ───
+      // We still update the raw lifetime total if it's a database key
       if (currentKeyObj.id) {
         try {
           const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
@@ -229,12 +235,13 @@ export async function generateInsights(
         key_takeaways: Array.isArray(parsed.key_takeaways) ? parsed.key_takeaways : [],
         seo_metadata: parsed.seo_metadata ?? { tags: [], suggested_titles: [], description: '' },
         tokens_used: tokens,
+        used_key_alias: currentKeyObj.alias, // Passed down to index.ts for the chart diary
       };
 
     } catch (err: unknown) {
       lastError = err;
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[Insights:KeyRotation] Key slot #${i + 1} failed: ${msg}. Falling back to next key...`);
+      console.warn(`[Insights:KeyRotation] Alias ${currentKeyObj.alias} failed: ${msg}. Falling back to next key...`);
     }
   }
 

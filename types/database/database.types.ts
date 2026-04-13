@@ -388,6 +388,22 @@ export type Database = {
           usage_date: string
         }[]
       }
+      get_daily_usage_by_key: {
+        Args: { days_back?: number }
+        Returns: {
+          api_key_name: string
+          total_tokens: number
+          usage_date: string
+        }[]
+      }
+      get_monthly_usage_by_key: {
+        Args: { months_back?: number }
+        Returns: {
+          api_key_name: string
+          total_tokens: number
+          usage_month: string
+        }[]
+      }
       get_my_workspace_ids: { Args: never; Returns: string[] }
       increment_key_burn: {
         Args: { key_id: string; token_amount: number }

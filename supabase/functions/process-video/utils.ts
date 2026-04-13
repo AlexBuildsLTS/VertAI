@@ -45,7 +45,7 @@ export function estimateReadingTime(wordCount: number): number {
 export function sanitizeForDb(text: string | null | undefined): string {
   if (!text) return '';
   return text
-    .replace(/\u0000/g, '') // Remove illegal binary bytes for Postgres
+    .replace(new RegExp('\u0000', 'g'), '') // Remove illegal binary bytes for Postgres
     .replace(/&#39;/g, "'") // Decode apostrophes
     .replace(/&quot;/g, '"') // Decode quotes
     .replace(/&amp;/g, '&') // Decode ampersands
@@ -113,8 +113,9 @@ export function parseJson3(jsonData: unknown): string | null {
       .trim();
 
     return processedText.length > 50 ? processedText : null;
-  } catch (parseErr: any) {
-    console.error('[UTILS:JSON3] Parsing exception:', parseErr.message);
+  } catch (parseErr) {
+    const message = parseErr instanceof Error ? parseErr.message : String(parseErr);
+    console.error('[UTILS:JSON3] Parsing exception:', message);
     return null;
   }
 }
