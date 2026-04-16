@@ -126,7 +126,7 @@ const AmbientOrb = ({
           left,
           right,
           bottom,
-          pointerEvents: 'none', // ← CRITICAL: MUST be inside style array on Android
+          pointerEvents: 'none', 
         },
         anim,
       ]}

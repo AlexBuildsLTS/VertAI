@@ -431,21 +431,15 @@ export default function AdminCommandCenter() {
               activeOpacity={0.7}
             >
               <ArrowBigLeftDash size={22} color={THEME.cyan} />
-              <Text className="text-[11px] font-black tracking-[4px] text-[#00F0FF] uppercase">
-                Return to Hub
-              </Text>
+              <Text className="text-[11px] font-black tracking-[4px] text-[#00F0FF] uppercase"></Text>
             </TouchableOpacity>
 
             <View className="flex-row items-start justify-between w-full">
               <View>
-                <Text className="text-3xl font-black tracking-tighter text-white uppercase md:text-4xl">
-                  Admin <Text style={{ color: THEME.cyan }}>CMD</Text>
-                </Text>
+                <Text className="text-3xl font-black tracking-tighter text-white uppercase md:text-4xl"></Text>
                 <View className="flex-row items-center gap-2 mt-2">
-                  <RefreshCcw size={12} color={THEME.cyan} />
-                  <Text className="text-[9px] md:text-[10px] font-black tracking-[4px] text-white/50 uppercase">
-                    Accounts
-                  </Text>
+                  <RefreshCcw size={16} color={THEME.cyan} />
+                  <Text className="text-[9px] md:text-[10px] font-black tracking-[4px] text-white/50 uppercase"></Text>
                 </View>
               </View>
 
