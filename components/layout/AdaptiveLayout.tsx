@@ -29,7 +29,12 @@ import Animated, {
   withSequence,
 } from 'react-native-reanimated';
 // IMPORTING THE COMPONENTS FOR THE ICONS
-import { Settings2, Cpu, Component, GalleryVerticalEnd } from 'lucide-react-native';
+import {
+  Settings2,
+  Cpu,
+  Component,
+  GalleryVerticalEnd,
+} from 'lucide-react-native';
 
 const NeuralGlow = ({ top, right, left, bottom, color }: any) => {
   const opacity = useSharedValue(0.03);
@@ -87,7 +92,7 @@ export const AdaptiveLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <View
-      className="flex-1 bg-[#020504] relative overflow-hidden"
+      className="flex-1 bg-[#010b1f8c] relative overflow-hidden"
       style={{ flex: 1 }}
     >
       {/* 2026 WEB OPTIMIZATION: Removes scrollbars for native app feel on browsers */}
@@ -144,7 +149,7 @@ export const AdaptiveLayout = ({ children }: { children: React.ReactNode }) => {
         {(isDesktop || isTablet) && (
           <View
             className={cn(
-              'bg-[#050508]/90 border-r border-white/5 pt-12 items-center z-50',
+              'bg-[#050508]/40 border-r border-white/5 pt-12 items-center z-50',
               isDesktop ? 'w-24' : 'w-20',
             )}
           >
@@ -168,7 +173,7 @@ export const AdaptiveLayout = ({ children }: { children: React.ReactNode }) => {
                 // Active Color is Cyan, Inactive is 20% white
                 const iconColor = isActive
                   ? '#00F0FF'
-                  : 'rgba(255,255,255,0.3)';
+                  : 'rgba(255,255,255,0.8)';
 
                 return (
                   <TouchableOpacity
@@ -180,7 +185,7 @@ export const AdaptiveLayout = ({ children }: { children: React.ReactNode }) => {
                       className={cn(
                         'w-12 h-12 rounded-2xl items-center justify-center transition-all',
                         isActive
-                          ? 'bg-[#00F0FF]/10 border border-[#00F0FF]/40 shadow-[0_0_15px_rgba(0,240,255,0.3)]'
+                          ? 'bg-[#00F0FF]/10 border border-[#00F0FF]/40 shadow-[0_0_15px_rgba(0,240,255,0.5)]'
                           : 'bg-transparent border-transparent',
                       )}
                     >
@@ -194,7 +199,7 @@ export const AdaptiveLayout = ({ children }: { children: React.ReactNode }) => {
                     <Text
                       className={cn(
                         'mt-2 text-[8px] font-black tracking-[3px] uppercase',
-                        isActive ? 'text-[#00F0FF]' : 'text-white/10',
+                        isActive ? 'text-[#00F0FF]' : 'text-white/50',
                       )}
                     >
                       {item.title}
@@ -213,20 +218,20 @@ export const AdaptiveLayout = ({ children }: { children: React.ReactNode }) => {
       {/* 5. MOBILE BOTTOM NAVIGATION */}
       {!isDesktop && !isTablet && (
         <View
-          className="absolute bottom-8 left-6 right-6 h-20 z-[100]"
+          className="absolute bottom-4 left-6 right-6 h-20 z-[100]"
           pointerEvents="box-none"
         >
           <BlurView
             intensity={Platform.OS === 'web' ? 20 : 60}
             tint="dark"
-            className="flex-row items-center justify-around h-full rounded-[30px] border border-white/10 bg-black/50 overflow-hidden shadow-2xl"
+            className="flex-row items-center justify-around h-full rounded-[30px] border border-white/5 bg-black/5 overflow-hidden shadow-2xl"
           >
             {navItems.map((item) => {
               const isActive =
                 pathname === item.path ||
                 (pathname.startsWith(item.path) && item.path !== '/');
 
-              const iconColor = isActive ? '#00F0FF' : 'rgba(255,255,255,0.2)';
+              const iconColor = isActive ? '#00F0FF' : 'rgba(255,255,255,0.8)';
 
               return (
                 <TouchableOpacity
@@ -241,7 +246,7 @@ export const AdaptiveLayout = ({ children }: { children: React.ReactNode }) => {
                     strokeWidth={isActive ? 2.5 : 1.5}
                   />
                   {isActive && (
-                    <View className="absolute bottom-4 w-1.5 h-1.5 rounded-full bg-[#00F0FF] shadow-[0_0_10px_#00F0FF]" />
+                    <View className="absolute bottom-4 w-1.5 h-1.5 rounded-full bg-[#00ffd5] shadow-[0_0_10px_#00F0FF]" />
                   )}
                 </TouchableOpacity>
               );

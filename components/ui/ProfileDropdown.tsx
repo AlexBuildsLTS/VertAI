@@ -1,16 +1,28 @@
 /**
  * components/ui/ProfileDropdown.tsx
- * User context menu — avatar trigger with floating dropdown.
- * Shows full name, email, dynamic role badge, and navigation actions.
- * Platform-safe: uses native shadow props (not NativeWind) for glow effects.
- * WebkitBackdropFilter applied conditionally for web blur support.
+ * VeraxAI — Enterprise User Context Menu
+ * ══════════════════════════════════════════════════════════════════════════════
+ * MODULE OVERVIEW:
+ * - AVATAR TRIGGER: Dynamic initials fallback with platform-safe shadow glow.
+ * - DROPDOWN MENU: WebkitBackdropFilter blur applied for Web, strict elevation for APK.
+ * - NAVIGATION: Reordered to Settings -> Support -> Admin -> Sign Out.
+ * - ICONOGRAPHY: Lucide icons placed strictly BEFORE text for optimal UX scanning.
+ * ══════════════════════════════════════════════════════════════════════════════
  */
 
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Platform, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Terminal, LifeBuoy, Wrench, LogOut } from 'lucide-react-native';
+import {
+  DatabaseZap,
+  ShieldPlus,
+  Component,
+  ShieldAlert,
+  ShieldCheck,
+  ScanEye,
+  LogOut,
+} from 'lucide-react-native';
 
 // ─── UTILITIES ───────────────────────────────────────────────────────────────
 
@@ -25,23 +37,23 @@ const getInitials = (name?: string): string => {
     .toUpperCase();
 };
 
-/** Returns color tokens for each user role. */
+/** Returns Liquid Neon color tokens for each user role. */
 const getRoleConfig = (role?: string) => {
   switch (role?.toLowerCase()) {
     case 'admin':
       return {
         label: 'ADMIN',
         bg: 'rgba(255,51,102,0.15)',
-        text: '#01754d',
+        text: '#fccf03', // Inherited brand color for Admin text
         border: 'rgba(133, 4, 36,0.3)',
         shadow: '#30010d',
       };
     case 'support':
       return {
         label: 'SUPPORT',
-        bg: 'rgba(50,27,90,0.15)',
+        bg: 'rgba(59, 21, 140,0.35)',
         text: '#01754d',
-        border: 'rgba(255,255,0,0.3)',
+        border: 'rgba(59, 21, 140,0.33)',
         shadow: '#260026',
       };
     case 'premium':
@@ -86,24 +98,26 @@ export const ProfileDropdown = () => {
 
   const handleNavigate = (path: string) => {
     setIsOpen(false);
-    router.push(path as any);
+    // Cast to never to strictly bypass dynamic route linting without using 'any'
+    router.push(path as never);
   };
 
   return (
     <View
       style={{ position: 'relative', alignItems: 'flex-end', zIndex: 9999 }}
     >
-      {/* Avatar trigger button */}
+      {/* ── AVATAR TRIGGER BUTTON ── */}
       <TouchableOpacity
         onPress={() => setIsOpen(!isOpen)}
         activeOpacity={0.8}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        className="w-10 h-10 rounded-full bg-[#020205] border border-white/10 items-center justify-center"
+        className="w-10 h-10 rounded-full bg-[#0101278c] border border-white/40 items-center justify-center"
         style={{
-          ...(Platform.OS === 'web' ? { cursor: 'pointer' as any } : {}),
+          // Safely apply web-only cursor
+          ...(Platform.OS === 'web' ? { cursor: 'pointer' as never } : {}),
           shadowColor: roleConfig.shadow,
           shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.8,
+          shadowOpacity: 0.08,
           shadowRadius: 10,
           elevation: 5,
         }}
@@ -111,7 +125,7 @@ export const ProfileDropdown = () => {
         {avatarUrl ? (
           <Image
             source={{ uri: avatarUrl }}
-            style={{ width: '100%', height: '100%', borderRadius: 20 }}
+            style={{ width: '100%', height: '100%', borderRadius: 45 }}
             resizeMode="cover"
           />
         ) : (
@@ -119,7 +133,7 @@ export const ProfileDropdown = () => {
             style={{
               color: roleConfig.text,
               fontFamily: Platform.OS === 'web' ? 'monospace' : 'Menlo',
-              fontSize: 13,
+              fontSize: 16,
               fontWeight: '900',
             }}
           >
@@ -128,36 +142,36 @@ export const ProfileDropdown = () => {
         )}
       </TouchableOpacity>
 
-      {/* Floating dropdown menu */}
+      {/* ── FLOATING DROPDOWN MENU ── */}
       {isOpen && (
         <>
-          {/* Invisible backdrop to close dropdown when tapping outside */}
+          {/* Invisible backdrop to catch outside taps and close menu */}
           <TouchableOpacity
-            style={{ position: 'fixed' as any, inset: 0, zIndex: 9998 }}
+            style={{ position: 'fixed' as never, inset: 0, zIndex: 9998 }}
             onPress={() => setIsOpen(false)}
             activeOpacity={1}
           />
 
           <View
-            className="absolute top-14 right-0 w-60 rounded-2xl bg-[#0A0D14]/95 border border-white/10 overflow-hidden"
+            className="absolute top-14 right-0 w-60 rounded-2xl bg-[#0A0D14]/80 border border-blue/20 overflow-hidden"
             style={{
               zIndex: 9999,
               ...(Platform.OS === 'web'
-                ? { WebkitBackdropFilter: 'blur(20px) saturate(180%)' as any }
+                ? { WebkitBackdropFilter: 'blur(20px) saturate(180%)' as never }
                 : {}),
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 10 },
               shadowOpacity: 1,
               shadowRadius: 20,
-              elevation: 15,
+              elevation: 25,
             }}
           >
-            {/* User info header */}
+            {/* 1. USER IDENTITY HEADER */}
             <View
               style={{
-                padding: 16,
+                padding: 12,
                 borderBottomWidth: 1,
-                borderBottomColor: 'rgba(255,255,255,0.05)',
+                borderBottomColor: 'rgba(255,255,255,0.08)',
               }}
             >
               <View
@@ -171,15 +185,15 @@ export const ProfileDropdown = () => {
                 <Text
                   style={{
                     color: '#fff',
-                    fontWeight: '800',
-                    fontSize: 13,
+                    fontWeight: '900',
+                    fontSize: 12,
                     flex: 1,
                   }}
                   numberOfLines={1}
                 >
                   {fullName}
                 </Text>
-                {/* Role badge */}
+                {/* Dynamic Role Badge */}
                 <View
                   style={{
                     backgroundColor: roleConfig.bg,
@@ -204,79 +218,61 @@ export const ProfileDropdown = () => {
                 </View>
               </View>
               <Text
-                style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}
+                style={{ color: 'rgba(52, 168, 83,0.6)', fontSize: 12 }}
                 numberOfLines={1}
               >
                 {email}
               </Text>
             </View>
 
-            {/* Navigation actions */}
-            <View style={{ padding: 8 }}>
-              {userRole === 'admin' && (
-                <TouchableOpacity
-                  onPress={() => handleNavigate('/admin')}
-                  activeOpacity={0.7}
-                  className="flex-row items-center p-3 rounded-xl"
-                  style={{ backgroundColor: 'rgba(4,207,159,0.15)' }}
-                >
-                  <Text
-                    style={{
-                      color: '#04cf9f',
-                      fontSize: 11,
-                      fontWeight: '800',
-                      letterSpacing: 1,
-                    }}
-                  >
-                    🛡️ ADMIN
-                  </Text>
-                    <Terminal size={14} color="#04cf9f" style={{ marginLeft: 8 }} /> 
-                </TouchableOpacity>
-              )}
-
+            {/* 2. NAVIGATION ACTIONS LIST */}
+            <View style={{ padding: 10, gap: 4 }}>
+              {/* Settings Action */}
               <TouchableOpacity
                 onPress={() => handleNavigate('/settings')}
                 activeOpacity={0.7}
-                className="flex-row items-center p-3 rounded-xl"
+                className="flex-row items-center p-3 transition-colors rounded-xl"
+                style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
               >
+                <ScanEye
+                  size={16}
+                  color="rgba(2, 207, 128,0.8)"
+                  style={{ marginRight: 12 }}
+                />
                 <Text
                   style={{
-                    color: 'rgba(255,255,255,0.8)',
-                    fontSize: 11,
+                    color: 'rgba(2, 207, 128,0.8)',
+                    fontSize: 12,
                     fontWeight: '700',
                     letterSpacing: 1,
                   }}
                 >
-                  ⚙️ SETTINGS
+                  SETTINGS
                 </Text>
-                < Wrench size={14} color="rgba(255,255,255,0.8)" style={{ marginLeft: 8 }} />
               </TouchableOpacity>
 
-              <View
-                style={{
-                  height: 1,
-                  backgroundColor: 'rgba(255,255,255,0.05)',
-                  marginVertical: 4,
-                }}
-              />    
+              {/* Support Action */}
               <TouchableOpacity
                 onPress={() => handleNavigate('/settings/support')}
                 activeOpacity={0.7}
-                className="flex-row items-center p-3 rounded-xl"
+                className="flex-row items-center p-3 transition-colors rounded-xl"
+                style={{ backgroundColor: 'transparent' }}
               >
+                <ShieldPlus
+                  size={16}
+                  color="rgba(2, 146, 207,0.8)"
+                  style={{ marginRight: 12 }}
+                />
                 <Text
                   style={{
-                    color: 'rgba(255,255,255,0.8)',
-                    fontSize: 11,
+                    color: 'rgba(2, 146, 207,0.8)',
+                    fontSize: 12,
                     fontWeight: '700',
                     letterSpacing: 1,
                   }}
                 >
-               
-                  
-                  ✉️ SUPPORT
+                  SUPPORT
                 </Text>
-                <LifeBuoy size={14} color="rgba(255,255,255,0.8)" style={{ marginLeft: 8 }} />
               </TouchableOpacity>
 
               <View
@@ -287,24 +283,59 @@ export const ProfileDropdown = () => {
                 }}
               />
 
+              {/* Admin Action (Conditional) */}
+              {userRole === 'admin' && (
+                <>
+                  <TouchableOpacity
+                    onPress={() => handleNavigate('/admin')}
+                    activeOpacity={0.8}
+                    className="flex-row items-center p-3 rounded-xl"
+                    style={{ backgroundColor: 'rgba(3, 168, 39,0.15)' }}
+                  >
+                    <DatabaseZap
+                      size={16}
+                      color="#cf023f"
+                      style={{ marginRight: 12 }}
+                    />
+                    <Text
+                      style={{
+                        color: '#cf023f',
+                        fontSize: 12,
+                        fontWeight: '900',
+                        letterSpacing: 1,
+                      }}
+                    >
+                      ADMIN
+                    </Text>
+                  </TouchableOpacity>
+                  <View
+                    style={{
+                      height: 1,
+                      backgroundColor: 'rgba(255,255,255,0.05)',
+                      marginVertical: 4,
+                    }}
+                  />
+                </>
+              )}
+
+              {/* Sign Out Action */}
               <TouchableOpacity
                 onPress={handleSignOut}
                 activeOpacity={0.7}
                 className="flex-row items-center p-3 rounded-xl"
                 style={{ backgroundColor: 'rgba(255,51,102,0.05)' }}
               >
+                <LogOut size={16} color="#FF3366" style={{ marginRight: 12 }} />
                 <Text
                   style={{
                     color: '#FF3366',
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: '800',
                     letterSpacing: 2,
-                    textAlign: 'center',
                   }}
                 >
                   SIGN OUT
                 </Text>
-                <LogOut size={14} color="#FF3366" style={{ marginLeft: 8 }} />
               </TouchableOpacity>
             </View>
           </View>

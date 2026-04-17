@@ -17,7 +17,7 @@ export const PageContainer: React.FC<PageContainerProps> = ({
 }) => {
   return (
     <View
-      className={cn('flex-1 bg-[#020205]', className)}
+      className={cn('flex-1 bg-[#0101139a]', className)}
       style={styles.full}
       {...props}
     >

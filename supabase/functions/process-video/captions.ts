@@ -1,16 +1,48 @@
 /**
  * supabase/functions/process-video/captions.ts
  * Enterprise Transcript Scraper (Native + RapidAPI Fallback)
+ * ----------------------------------------------------------------------------
+ * MODULE OVERVIEW:
+ * - TIER 1: Native YouTube XML Scraping (Zero cost)
+ * - TIER 2: RapidAPI Fallback (Paid bypass)
+ * - BRANDING: Unified to "VeraxAI Engine 1.0"
+ * - TYPING & LINTING: Strict TypeScript (Zero 'any', fully const-compliant).
+ * ----------------------------------------------------------------------------
  */
 
 export interface CaptionExtractResult {
   text: string;
-  json: Record<string, any>;
+  json: Record<string, unknown>; // Strictly typed instead of 'any'
   method: string;
 }
 
+// ─── STRICT INTERFACES FOR JSON PARSING ────────────────────────────────────
+interface YouTubeCaptionTrack {
+  languageCode: string;
+  baseUrl: string;
+}
+
+interface YouTubePlayerResponse {
+  captions?: {
+    playerCaptionsTracklistRenderer?: {
+      captionTracks?: YouTubeCaptionTrack[];
+    };
+  };
+}
+
+interface RapidApiTranscriptSegment {
+  text: string;
+  [key: string]: unknown;
+}
+
+interface RapidApiResponse {
+  success: boolean;
+  transcript?: RapidApiTranscriptSegment[];
+}
+
 // ─── TIER 1: NATIVE BRACE-COUNTING SCRAPER (FREE) ──────────────────────────
-function extractJsonObject(html: string, marker: string): any | null {
+
+function extractJsonObject(html: string, marker: string): YouTubePlayerResponse | null {
   const markerIdx = html.indexOf(marker);
   if (markerIdx === -1) return null;
   const start = html.indexOf('{', markerIdx + marker.length);
@@ -34,8 +66,11 @@ function extractJsonObject(html: string, marker: string): any | null {
       depth--;
       if (depth === 0) {
         try {
-          return JSON.parse(html.substring(start, i + 1));
-        } catch { return null; }
+          // Cast the parsed raw JSON to our strict interface
+          return JSON.parse(html.substring(start, i + 1)) as YouTubePlayerResponse;
+        } catch {
+          return null;
+        }
       }
     }
   }
@@ -58,7 +93,8 @@ async function getNativeCaptions(videoId: string): Promise<CaptionExtractResult 
     const html = await response.text();
 
     const markers = ['ytInitialPlayerResponse = ', 'ytInitialPlayerResponse=', 'window["ytInitialPlayerResponse"] = '];
-    let playerResponseJson: any = null;
+    let playerResponseJson: YouTubePlayerResponse | null = null;
+
     for (const marker of markers) {
       const candidate = extractJsonObject(html, marker);
       if (candidate?.captions) {
@@ -72,7 +108,8 @@ async function getNativeCaptions(videoId: string): Promise<CaptionExtractResult 
     const tracks = playerResponseJson.captions?.playerCaptionsTracklistRenderer?.captionTracks;
     if (!tracks || tracks.length === 0) return null;
 
-    const track = tracks.find((t: any) => t.languageCode.startsWith('en')) ?? tracks[0];
+    // Strict typing applied to the find method
+    const track = tracks.find((t: YouTubeCaptionTrack) => t.languageCode.startsWith('en')) ?? tracks[0];
     const xmlResponse = await fetch(track.baseUrl, { signal: AbortSignal.timeout(8000) });
     if (!xmlResponse.ok) return null;
 
@@ -82,7 +119,8 @@ async function getNativeCaptions(videoId: string): Promise<CaptionExtractResult 
 
     let fullTranscript = '';
     for (const node of textNodes) {
-      let text = node.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+      // FIX: Changed 'let text' to 'const text' to satisfy prefer-const rule
+      const text = node.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
       fullTranscript += text + ' ';
     }
 
@@ -90,8 +128,14 @@ async function getNativeCaptions(videoId: string): Promise<CaptionExtractResult 
     if (cleanText.length < 50) return null;
 
     console.log(`[Captions:Native] ✓ Scraped ${cleanText.split(/\s+/).length} words cleanly.`);
-    return { text: cleanText, json: { source: 'youtube_native' }, method: 'native_youtube_scraper' };
-  } catch (err) {
+
+    return {
+      text: cleanText,
+      json: { source: 'veraxai_engine_direct' },
+      method: 'VeraxAI Engine 1.0'
+    };
+  } catch {
+    // FIX: Using modern omitted binding to safely ignore the unused err variable
     return null;
   }
 }
@@ -106,7 +150,6 @@ async function getRapidApiCaptions(videoId: string): Promise<CaptionExtractResul
 
   console.log(`[Captions:RapidAPI] Native failed. Attempting API bypass for ${videoId}...`);
   try {
-    // URL mapped EXACTLY to your RapidAPI screenshot parameter: videoId=...
     const res = await fetch(`https://youtube-transcript3.p.rapidapi.com/api/transcript?videoId=${videoId}`, {
       method: 'GET',
       headers: {
@@ -122,15 +165,21 @@ async function getRapidApiCaptions(videoId: string): Promise<CaptionExtractResul
       return null;
     }
 
-    const data = await res.json();
+    // Cast the unknown JSON response to our strict interface
+    const data = (await res.json()) as RapidApiResponse;
 
-    // Mapped EXACTLY to the JSON response in your screenshot
     if (data.success === true && Array.isArray(data.transcript) && data.transcript.length > 0) {
-      const fullText = data.transcript.map((segment: any) => segment.text).join(' ').replace(/\s+/g, ' ').trim();
+      const fullText = data.transcript.map((segment: RapidApiTranscriptSegment) => segment.text).join(' ').replace(/\s+/g, ' ').trim();
 
       if (fullText.length > 50) {
         console.log(`[Captions:RapidAPI] ✓ SUCCESS. Fetched ${fullText.split(/\s+/).length} words.`);
-        return { text: fullText, json: { source: 'rapidapi_transcript3', raw: data }, method: 'rapidapi_transcript3' };
+
+        return {
+          text: fullText,
+          // Safely cast raw data to Record<string, unknown> to satisfy the return interface
+          json: { source: 'veraxai_engine_fallback', raw: data as unknown as Record<string, unknown> },
+          method: 'VeraxAI Engine 1.0'
+        };
       }
     }
 
