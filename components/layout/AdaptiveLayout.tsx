@@ -95,7 +95,7 @@ export const AdaptiveLayout = ({ children }: { children: React.ReactNode }) => {
       className="flex-1 bg-[#010b1f8c] relative overflow-hidden"
       style={{ flex: 1 }}
     >
-      {/* 2026 WEB OPTIMIZATION: Removes scrollbars for native app feel on browsers */}
+      {/* Removes scrollbars for native app feel on browsers */}
       {Platform.OS === 'web' && (
         <style
           dangerouslySetInnerHTML={{
@@ -149,7 +149,7 @@ export const AdaptiveLayout = ({ children }: { children: React.ReactNode }) => {
         {(isDesktop || isTablet) && (
           <View
             className={cn(
-              'bg-[#050508]/40 border-r border-white/5 pt-12 items-center z-50',
+              'bg-[#050508]/10 border-r border-blue/10 pt-12 items-center z-50',
               isDesktop ? 'w-24' : 'w-20',
             )}
           >
@@ -173,7 +173,7 @@ export const AdaptiveLayout = ({ children }: { children: React.ReactNode }) => {
                 // Active Color is Cyan, Inactive is 20% white
                 const iconColor = isActive
                   ? '#00F0FF'
-                  : 'rgba(255,255,255,0.8)';
+                  : 'rgba(255,255,255,0.9)';
 
                 return (
                   <TouchableOpacity

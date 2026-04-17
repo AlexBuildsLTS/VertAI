@@ -1,6 +1,6 @@
 /**
  * app/(dashboard)/video/[id].tsx
- * - VerAI Monolithic Layout
+ * - VeraxAI Layout
  * ══════════════════════════════════════════════════════════════════════════════
  * ARCHITECTURE
  * RESPONSIVE MATRIX: Export buttons scroll horizontally on mobile to prevent squishing

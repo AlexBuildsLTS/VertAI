@@ -1,6 +1,6 @@
 /**
  * components/domain/TranscriptViewer.tsx
- * VerAI Interactive Intelligence Viewer
+ * VeraxAI Interactive Intelligence Viewer
  * ----------------------------------------------------------------------------
  * FEATURES:
  * SIDE-BY-SIDE Timeline and Raw Text are displayed simultaneously

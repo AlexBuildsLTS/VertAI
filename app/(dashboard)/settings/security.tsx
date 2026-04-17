@@ -1,16 +1,16 @@
 /**
  * app/(dashboard)/settings/security.tsx
- * VerAI — Security & Identity Vault
+ * VeraxAI — Security & Identity Vault
  * ══════════════════════════════════════════════════════════════════════════════
  * PROTOCOL:
  * 1. BIOMETRIC KERNEL: Real hardware verification via expo-local-authentication.
  * 2. 4-DIGIT PIN FALLBACK: Cross-platform vault access for Web & Desktop.
  * 3. CREDENTIAL ROTATION: Current-Password + New-Password + Confirmation.
- * 4. ENCRYPTED AI VAULT: Locked behind Biometrics/PIN to protect API keys.
+ * 4. ENCRYPTED AI VAULT (RBAC): Locked behind Biometrics/PIN. Premium/Admin ONLY.
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,7 @@ import {
   ShieldAlert,
   KeyRound,
   Unlock,
+  Crown,
 } from 'lucide-react-native';
 
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -54,11 +55,12 @@ import Animated, {
 
 // ─── STRICT THEME ENFORCEMENT ───
 const THEME = {
-  obsidian: '#000012',
+  obsidian: '#020205',
   danger: '#FF007F', // Neon Pink
   success: '#32FF00', // Neon Green
   cyan: '#00F0FF', // Neon Cyan
   purple: '#8A2BE2', // Neon Purple
+  gold: '#FFD700', // Premium Gold
   slate: '#94a3b8',
 };
 
@@ -149,6 +151,9 @@ export default function SecuritySettingsScreen() {
   const { width: SCREEN_WIDTH } = Dimensions.get('window');
   const isMobile = SCREEN_WIDTH < 768;
 
+  // ── Role & Access State ──
+  const [userRole, setUserRole] = useState<'member' | 'premium' | 'admin' | 'support'>('member');
+
   // ── Password States ──
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -185,15 +190,16 @@ export default function SecuritySettingsScreen() {
         setBioSupported(hasHw && enrolled);
       }
 
-      // 2. Fetch Vault Data
+      // 2. Fetch Vault Data & Role
       if (user) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('profiles')
-          .select('biometrics_enabled, custom_api_key')
+          .select('biometrics_enabled, custom_api_key, role')
           .eq('id', user.id)
           .maybeSingle();
 
-        if (data) {
+        if (data && !error) {
+          setUserRole(data.role || 'member');
           const isBioOn = !!data.biometrics_enabled;
           setBioEnabled(isBioOn);
 
@@ -201,11 +207,16 @@ export default function SecuritySettingsScreen() {
           try {
             if (data.custom_api_key) {
               const keys = JSON.parse(data.custom_api_key);
-              setApiKeys({
-                openai: keys.openai ?? '',
-                gemini: keys.gemini ?? '',
-                anthropic: keys.anthropic ?? '',
-              });
+              
+              // Only hydrate API keys if user has premium rights
+              if (data.role === 'premium' || data.role === 'admin') {
+                setApiKeys({
+                  openai: keys.openai ?? '',
+                  gemini: keys.gemini ?? '',
+                  anthropic: keys.anthropic ?? '',
+                });
+              }
+              
               if (keys.pin) {
                 fetchedPin = keys.pin;
                 setMasterPin(keys.pin);
@@ -265,7 +276,6 @@ export default function SecuritySettingsScreen() {
 
   // ── Action: Unlock Vault ──
   const attemptUnlock = async () => {
-    // Try biometrics first if enabled
     if (bioEnabled && bioSupported) {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Unlock Security Vault',
@@ -277,11 +287,9 @@ export default function SecuritySettingsScreen() {
       }
     }
 
-    // If no biometrics or it failed, fallback to PIN if they have one
     if (masterPin) {
       setShowPinPad(true);
     } else if (!bioEnabled) {
-      // Failsafe: if neither are enabled somehow, just open it
       setIsVaultLocked(false);
     }
   };
@@ -337,11 +345,13 @@ export default function SecuritySettingsScreen() {
     setIsSyncingKeys(true);
 
     const targetPin = overridePin !== undefined ? overridePin : masterPin;
+    const hasPremiumRights = userRole === 'premium' || userRole === 'admin';
 
+    // ZERO-TRUST ENFORCEMENT: Strip API keys if user is a standard member
     const cleanedKeys = {
-      ...(apiKeys.openai ? { openai: apiKeys.openai } : {}),
-      ...(apiKeys.gemini ? { gemini: apiKeys.gemini } : {}),
-      ...(apiKeys.anthropic ? { anthropic: apiKeys.anthropic } : {}),
+      ...(hasPremiumRights && apiKeys.openai ? { openai: apiKeys.openai } : {}),
+      ...(hasPremiumRights && apiKeys.gemini ? { gemini: apiKeys.gemini } : {}),
+      ...(hasPremiumRights && apiKeys.anthropic ? { anthropic: apiKeys.anthropic } : {}),
       ...(targetPin ? { pin: targetPin } : {}),
     };
 
@@ -368,9 +378,10 @@ export default function SecuritySettingsScreen() {
   };
 
   const entropyScore = calculateEntropy(newPw);
+  const isPremium = userRole === 'premium' || userRole === 'admin';
 
   return (
-    <SafeAreaView className="flex-1 bg-[#000012]">
+    <SafeAreaView className="flex-1 bg-[#020205]">
       <NeuralOrb delay={0} color={THEME.danger} top={-50} left={-100} />
       <NeuralOrb delay={4000} color={THEME.purple} bottom={-100} right={-50} />
 
@@ -396,7 +407,6 @@ export default function SecuritySettingsScreen() {
             delay={100}
             className="relative z-50 items-center justify-center w-full pt-4 mb-12"
           >
-            {/* 1. Return Button (Locked to left edge, vertically centered to image) */}
             <TouchableOpacity
               onPress={() =>
                 router.canGoBack() ? router.back() : router.replace('/settings')
@@ -411,7 +421,6 @@ export default function SecuritySettingsScreen() {
               </Text>
             </TouchableOpacity>
 
-            {/* 2. Centered Logo & Glowing Line Stack */}
             <View className="items-center">
               <Image
                 source={require('../../../assets/sha128.png')}
@@ -433,7 +442,6 @@ export default function SecuritySettingsScreen() {
               </View>
 
               <View className="gap-y-4">
-                {/* Hardware Biometrics */}
                 <View className="flex-row items-center justify-between p-5 md:p-6 border bg-black/40 border-white/10 rounded-[24px]">
                   <View>
                     <Text className="text-xs font-bold tracking-wider text-white uppercase md:text-sm">
@@ -466,7 +474,6 @@ export default function SecuritySettingsScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* 4-Digit Fallback PIN */}
                 <View className="flex-row items-center justify-between p-5 md:p-6 border bg-black/40 border-white/10 rounded-[24px]">
                   <View className="flex-1 mr-4">
                     <Text className="text-xs font-bold tracking-wider text-white uppercase md:text-sm">
@@ -610,9 +617,31 @@ export default function SecuritySettingsScreen() {
             </GlassCard>
           </FadeIn>
 
-          {/* ── AI INTEGRATION VAULT (WITH LOCKOUT LOGIC) ── */}
+          {/* ── AI INTEGRATION VAULT (RBAC ENFORCED) ── */}
           <FadeIn delay={400}>
-            <GlassCard className="p-6 md:p-10 mb-8 bg-white/[0.015] border-white/5 rounded-[32px] overflow-hidden">
+            <GlassCard className="p-6 md:p-10 mb-8 bg-white/[0.015] border-white/5 rounded-[32px] overflow-hidden relative">
+              
+              {/* RBAC OVERLAY FOR NON-PREMIUM USERS */}
+              {!isPremium && !isVaultLocked && (
+                <View className="absolute inset-0 z-20 items-center justify-center bg-[#020205]/90 backdrop-blur-xl">
+                  <Crown size={40} color={THEME.gold} className="mb-4" />
+                  <Text className="mb-2 text-xl font-black tracking-widest text-white uppercase">
+                    Premium Protocol Required
+                  </Text>
+                  <Text className="text-[10px] text-white/60 tracking-[2px] uppercase mb-8 text-center max-w-[280px]">
+                    Unlock the Sovereign Vault to utilize custom LLM inference endpoints and bypass rate limits.
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => router.push('/settings/billing')}
+                    className="flex-row items-center px-8 py-4 bg-[#FFD700]/10 border border-[#FFD700]/40 rounded-2xl active:scale-95"
+                  >
+                    <Text className="text-xs font-black text-[#FFD700] uppercase tracking-widest">
+                      Upgrade to Premium
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {/* LOCK SCREEN OVERLAY */}
               {isVaultLocked ? (
                 <View className="items-center justify-center py-10">
@@ -668,8 +697,8 @@ export default function SecuritySettingsScreen() {
                   )}
                 </View>
               ) : (
-                /* UNLOCKED CONTENT */
-                <View>
+                /* UNLOCKED CONTENT (ONLY INTERACTABLE IF PREMIUM) */
+                <View style={{ opacity: isPremium ? 1 : 0.3 }}>
                   <View className="flex-row items-center mb-10 gap-x-4">
                     <Cpu size={24} color={THEME.cyan} />
                     <Text className="text-lg font-black tracking-widest text-white uppercase md:text-xl">
@@ -688,6 +717,7 @@ export default function SecuritySettingsScreen() {
                           onChangeText={(v) =>
                             setApiKeys((p) => ({ ...p, openai: v }))
                           }
+                          editable={isPremium}
                           placeholder="sk-..."
                           placeholderTextColor="rgba(255,255,255,0.2)"
                           style={strictInputStyle}
@@ -704,6 +734,7 @@ export default function SecuritySettingsScreen() {
                           onChangeText={(v) =>
                             setApiKeys((p) => ({ ...p, gemini: v }))
                           }
+                          editable={isPremium}
                           placeholder="AIza..."
                           placeholderTextColor="rgba(255,255,255,0.2)"
                           style={strictInputStyle}
@@ -720,6 +751,7 @@ export default function SecuritySettingsScreen() {
                           onChangeText={(v) =>
                             setApiKeys((p) => ({ ...p, anthropic: v }))
                           }
+                          editable={isPremium}
                           placeholder="sk-ant-..."
                           placeholderTextColor="rgba(255,255,255,0.2)"
                           style={strictInputStyle}
@@ -729,7 +761,7 @@ export default function SecuritySettingsScreen() {
 
                     <TouchableOpacity
                       onPress={() => handleSaveApiVault()}
-                      disabled={isSyncingKeys}
+                      disabled={isSyncingKeys || !isPremium}
                       className="flex-row items-center justify-center h-14 mt-4 bg-[#00F0FF]/10 border border-[#00F0FF]/30 rounded-[20px] active:scale-95 transition-transform"
                     >
                       {isSyncingKeys ? (
@@ -784,7 +816,7 @@ export default function SecuritySettingsScreen() {
           <View className="items-center mt-20 opacity-30">
             <View className="h-[1px] w-12 bg-white/20 mb-4" />
             <Text className="text-[9px] font-mono tracking-[6px] text-white uppercase text-center">
-              VerAI Security Core
+              VeraxAI Security Core
             </Text>
           </View>
         </ScrollView>
