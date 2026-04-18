@@ -235,7 +235,7 @@ const AmbientArchitecture = React.memo(() => {
       {/* ── ORGANIC DRIFTING NEBULAS ── */}
       {/* These use Sine/Cosine to orbit smoothly without ever touching an edge */}
       <OrganicOrb
-        color={THEME.cyan}
+        color={THEME.pink}
         size={width * 0.5}
         initialX={width * 0.6}
         initialY={height * 0.3}
@@ -257,7 +257,7 @@ const AmbientArchitecture = React.memo(() => {
         opacityBase={0.08}
       />
       <OrganicOrb
-        color={THEME.pink}
+        color={THEME.green}
         size={width * 0.4}
         initialX={width * 0.4}
         initialY={height * 0.8}

@@ -8,7 +8,7 @@
  * This file serves a primary entry point for users identity verifications
  * - Multi-Platform OAuth: Native device browser handoff for Google Sign-In and Web redirect
  * - Anti-Flash UX: Reanimated button morphing prevents DOM destruction and keyboard snap
- * - UI Physics: CALM Multi-Wave Engine. Smooth sine-wave pulses, no snapping.
+ * - UI Physics: The "Wandering Core" Engine. A single, smooth gliding emitter.
  * - Layout: Desktop split-pane with perfectly centered flex layouts.
  * * ============================================================================
  */
@@ -77,6 +77,7 @@ import Animated, {
   withDelay,
   interpolateColor,
   Easing,
+  useFrameCallback,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -118,8 +119,6 @@ interface AuthFormProps {
   router: ReturnType<typeof useRouter>;
 }
 
-// ─── STATIC CONTENT ──────────────────────────────────────────────────────────
-
 const BENTO_ITEMS = [
   {
     icon: Zap,
@@ -141,8 +140,6 @@ const BENTO_ITEMS = [
   },
 ];
 
-// ─── ERROR INTERCEPTOR ───────────────────────────────────────────────────────
-
 function mapAuthError(errorMessage: string): {
   type: MessageType;
   text: string;
@@ -154,99 +151,91 @@ function mapAuthError(errorMessage: string): {
   if (
     lowMsg.includes('user already registered') ||
     lowMsg.includes('already exists')
-  ) {
+  )
     return {
       type: 'warning',
       text: 'This email is already registered. Please sign in.',
     };
-  }
-  if (lowMsg.includes('password should be at least')) {
+  if (lowMsg.includes('password should be at least'))
     return {
       type: 'warning',
       text: 'Your password must be at least 10 characters long.',
     };
-  }
-  if (lowMsg.includes('rate limit')) {
+  if (lowMsg.includes('rate limit'))
     return {
       type: 'warning',
       text: 'Too many attempts. Please wait a moment and try again.',
     };
-  }
-  if (lowMsg.includes('email not confirmed')) {
+  if (lowMsg.includes('email not confirmed'))
     return {
       type: 'warning',
       text: 'Account pending verification. Please check your inbox.',
     };
-  }
-  if (lowMsg.includes('invalid login credentials')) {
+  if (lowMsg.includes('invalid login credentials'))
     return {
       type: 'error',
       text: 'Incorrect email or password. Please try again.',
     };
-  }
-  if (lowMsg.includes('network') || lowMsg.includes('fetch')) {
+  if (lowMsg.includes('network') || lowMsg.includes('fetch'))
     return {
       type: 'error',
       text: 'Network failed. Please check your internet connection.',
     };
-  }
-  if (lowMsg.includes('unexpected_failure') || lowMsg.includes('500')) {
+  if (lowMsg.includes('unexpected_failure') || lowMsg.includes('500'))
     return {
       type: 'error',
       text: 'System fault: Database error on the server.',
     };
-  }
 
   return { type: 'error', text: errorMessage };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MODULE 1: CALM MULTI-WAVE INTERFERENCE ENGINE
+// MODULE 1: THE WANDERING CORE ENGINE (Smooth, Sleek, Gliding Emitter)
 // ══════════════════════════════════════════════════════════════════════════════
-// ⚙️ CUSTOMIZATION GUIDE - RIPPLE BEHAVIOR:
-// - duration: How many milliseconds it takes a ripple to reach max size.
-//   Higher = Slower, calmer waves. (Default: 14000ms)
-// - maxScale: How large the ripple gets relative to its core.
-// - opacity interpolation: [0, 0.1, 0.6, 1] means:
-//   starts invisible (0), fades to 30% visibility early, slowly fades to 0.
-// ══════════════════════════════════════════════════════════════════════════════
+// ⚙️ CUSTOMIZATION GUIDE:
+// - color: Change the hex code to alter the wave and core ball color.
+// - waveCount: Number of pulses active at the same time (e.g., 4).
+// - baseDuration: Speed of the waves expanding (Default: 12000ms / 12 seconds).
+// - opacity interpolation: [0, 0.4, 0.05, 0] ensures waves start invisible, fade
+//   in to 40% strength, and get weaker as they expand until they vanish perfectly.
 
 interface RippleProps {
   color: string;
   delay: number;
   duration: number;
-  maxScale: number;
+  maxSize: number;
 }
 
 const SingleRipple = memo(
-  ({ color, delay, duration, maxScale }: RippleProps) => {
+  ({ color, delay, duration, maxSize }: RippleProps) => {
     const progress = useSharedValue(0);
 
     useEffect(() => {
       progress.value = withDelay(
         delay,
         withRepeat(
-          // Easing.out(Easing.sin) creates a very smooth, natural expanding deceleration
           withTiming(1, { duration, easing: Easing.out(Easing.sin) }),
           -1,
-          false, // Resets instantly to 0 to spawn the next ripple
+          false,
         ),
       );
     }, [delay, duration, progress]);
 
     const animatedStyle = useAnimatedStyle(() => {
       return {
-        transform: [
-          { scale: interpolate(progress.value, [0, 1], [1, maxScale]) },
-        ],
-        // CRITICAL FIX: Starts at opacity 0 to prevent the "teleporting/blinking" pop effect.
-        // Peaks gently at 0.3 opacity, then softly fades out completely by the end.
+        // The wave physically expands from 0 to maxSize
+        width: interpolate(progress.value, [0, 1], [0, maxSize]),
+        height: interpolate(progress.value, [0, 1], [0, maxSize]),
+        borderRadius: interpolate(progress.value, [0, 1], [0, maxSize / 2]),
+
+        // The opacity mathematically gets weaker as the wave expands (progress -> 1)
         opacity: interpolate(
           progress.value,
           [0, 0.1, 0.6, 1],
-          [0, 0.3, 0.05, 0],
+          [0, 0.4, 0.05, 0],
         ),
-        borderWidth: interpolate(progress.value, [0, 1], [2, 0]), // Wave thins out as it expands
+        borderWidth: interpolate(progress.value, [0, 1], [24, 2]), // pulse size
       };
     });
 
@@ -255,11 +244,6 @@ const SingleRipple = memo(
         style={[
           {
             position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            borderRadius: 9999,
             borderColor: color,
             backgroundColor: 'transparent',
           },
@@ -271,9 +255,7 @@ const SingleRipple = memo(
 );
 SingleRipple.displayName = 'SingleRipple';
 
-interface EmitterProps {
-  centerX: number;
-  centerY: number;
+interface GlidingEmitterProps {
   coreSize: number;
   color: string;
   maxWaveSize: number;
@@ -281,63 +263,83 @@ interface EmitterProps {
   baseDuration: number;
 }
 
-const WaveEmitter = memo(
+const WanderingCore = memo(
   ({
-    centerX,
-    centerY,
     coreSize,
     color,
     maxWaveSize,
     waveCount,
     baseDuration,
-  }: EmitterProps) => {
+  }: GlidingEmitterProps) => {
+    const { width, height } = Dimensions.get('window');
+    const time = useSharedValue(0);
     const stagger = baseDuration / waveCount;
-    const maxScale = maxWaveSize / coreSize;
 
-    // ⚙️ CUSTOMIZATION: Core Ball Breathing Pulse
-    // This animates the center ball itself, so it looks alive and glowing
-    // instead of just being a static dot.
-    const corePulse = useSharedValue(0.8  );
+    // 120fps UI-Thread Logic for ultra-smooth gliding
+    useFrameCallback((frameInfo) => {
+      if (frameInfo.timeSincePreviousFrame === null) return;
+      // Slower time multiplier = slower, sleeker movement across the screen
+      time.value += frameInfo.timeSincePreviousFrame / 3000;
+    });
 
+    // Math.sin and Math.cos create an organic "Infinity" looping path
+    // It moves horizontally across 60% of the screen, and vertically across 40%.
+    const animatedPosition = useAnimatedStyle(() => {
+      const xOffset = Math.sin(time.value * 0.4) * (width * 0.3);
+      const yOffset = Math.cos(time.value * 0.3) * (height * 0.2);
+
+      return {
+        transform: [
+          { translateX: width / 2 + xOffset },
+          { translateY: height / 2 + yOffset },
+        ],
+      };
+    });
+
+    // Breathing effect for the core ball itself
+    const corePulse = useSharedValue(0.6);
     useEffect(() => {
       corePulse.value = withRepeat(
-        // Breathes back and forth every 3 seconds seamlessly
-        withTiming(1, { duration: 8000, easing: Easing.inOut(Easing.quad) }),
+        withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.sin) }),
         -1,
         true,
       );
     }, []);
 
     const coreStyle = useAnimatedStyle(() => ({
-      opacity: interpolate(corePulse.value, [0.8, 1.6], [0.40, 0.8]),
+      opacity: interpolate(corePulse.value, [0.4, 1], [0.4, 1]),
       transform: [
-        { scale: interpolate(corePulse.value, [0.8, 1.8], [0.70, 1.40]) },
+        { scale: interpolate(corePulse.value, [0.4, 1], [0.8, 1.2]) },
       ],
     }));
 
     return (
-      <View
-        style={{
-          position: 'absolute',
-          left: centerX - coreSize / 2,
-          top: centerY - coreSize / 2,
-          width: coreSize,
-          height: coreSize,
-          justifyContent: 'center',
-          alignItems: 'center',
-        }}
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: 0,
+            height: 0,
+            alignItems: 'center',
+            justifyContent: 'center',
+          },
+          animatedPosition,
+        ]}
       >
+        {/* ── SPATIAL WAVES ── */}
         {Array.from({ length: waveCount }).map((_, index) => (
           <SingleRipple
             key={`ripple-${index}`}
             color={color}
             delay={index * stagger}
             duration={baseDuration}
-            maxScale={maxScale}
+            maxSize={maxWaveSize}
           />
         ))}
 
-        {/* The Breathing Core Ball */}
+        {/* ── THE CORE BALL ── */}
         <Animated.View
           style={[
             coreStyle,
@@ -347,7 +349,7 @@ const WaveEmitter = memo(
               borderRadius: coreSize / 2,
               backgroundColor: color,
               shadowColor: color,
-              shadowRadius: 12,
+              shadowRadius: 15,
               shadowOpacity: 1,
               shadowOffset: { width: 0, height: 0 },
               ...(Platform.OS === 'web'
@@ -356,68 +358,37 @@ const WaveEmitter = memo(
             },
           ]}
         />
-      </View>
+      </Animated.View>
     );
   },
 );
-WaveEmitter.displayName = 'WaveEmitter';
+WanderingCore.displayName = 'WanderingCore';
 
-// ⚙️ CUSTOMIZATION GUIDE - MASTER AMBIENT CONTROLLER:
-// To change the speed of the waves globally, adjust `GLOBAL_WAVE_DURATION`.
-// To change colors, modify the `color` prop passed to each WaveEmitter.
+// ─── MASTER AMBIENT CONTROLLER ───
 const AmbientArchitecture = memo(() => {
   const { width, height } = Dimensions.get('window');
   const isDesktop = width >= 1024;
-
-  // Anchors - where the 3 points live on the screen
-  const primaryX = isDesktop ? width * 0.2 : width * 0.5;
-  const primaryY = height * 0.4;
-  const secondaryLeftX = width * 0.8;
-  const secondaryLeftY = height * 0.7;
-  const secondaryRightX = width * 0.5;
-  const secondaryRightY = height * 0.9;
-
-  const massiveWaveRadius = isDesktop ? width * 0.8 : height * 1.2;
-
-  // SLOWED DOWN: 14000ms = 14 seconds for a wave to cross the screen (Very calm)
-  const GLOBAL_WAVE_DURATION = 14000;
+  const massiveWaveRadius = isDesktop ? width * 1.0 : height * 1.4;
 
   return (
-    // CRITICAL: pointerEvents="none" prevents the UI from ever blocking touch
+    // CRITICAL: pointerEvents="none" guarantees zero touch overlap
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <WaveEmitter
-        centerX={primaryX}
-        centerY={primaryY}
-        coreSize={isDesktop ? 16 : 12}
-        color="#3B82F6" // Calm Blue
+      {/* ── THE WANDERING CORE ── */}
+      <WanderingCore
+        coreSize={18}
+        color="#00F0FF" // Cyan Core
         maxWaveSize={massiveWaveRadius}
-        waveCount={3} // Reduced wave count to avoid spam
-        baseDuration={GLOBAL_WAVE_DURATION}
-      />
-      <WaveEmitter
-        centerX={secondaryLeftX}
-        centerY={secondaryLeftY}
-        coreSize={12}
-        color="#8B5CF6" // Purple
-        maxWaveSize={massiveWaveRadius * 0.8}
-        waveCount={2}
-        baseDuration={GLOBAL_WAVE_DURATION * 1.1} // Slightly out of phase for organic feel
-      />
-      <WaveEmitter
-        centerX={secondaryRightX}
-        centerY={secondaryRightY}
-        coreSize={12}
-        color="#00F0FF" // Cyan
-        maxWaveSize={massiveWaveRadius * 0.7}
-        waveCount={2}
-        baseDuration={GLOBAL_WAVE_DURATION * 1.2}
+        waveCount={4} // 4 simultaneous pulses fading as they grow
+        baseDuration={16000} // 12 seconds for a wave to fully expand
       />
     </View>
   );
 });
 AmbientArchitecture.displayName = 'AmbientArchitecture';
 
-// ─── MAIN SCREEN COMPONENT ───────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// MODULE 2: MAIN SCREEN COMPONENT & AUTH ROUTING
+// ══════════════════════════════════════════════════════════════════════════════
 
 export default function SignInScreen() {
   const { signInWithPassword, signUp } = useAuthStore();
@@ -597,8 +568,7 @@ export default function SignInScreen() {
 
   return (
     <View className="flex-1 bg-[#000016]">
-      {/* ── AMBIENT WAVE ENGINE ── */}
-      {/* Renders behind everything. Unobstructive and performant. */}
+      {/* ── AMBIENT GLIDING CORE ENGINE ── */}
       <View
         style={[
           StyleSheet.absoluteFill,
@@ -623,7 +593,7 @@ export default function SignInScreen() {
                     alignSelf: 'center',
                     paddingVertical: 40,
                     flexGrow: 1,
-                    justifyContent: 'center', // Perfect Vertical Centering for Form
+                    justifyContent: 'center',
                   }}
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
@@ -811,7 +781,6 @@ const AuthForm = memo(
         style={styles.formContainer}
       >
         {successState !== 'none' ? (
-          // CLEAN SUCCESS STATE: Fades in seamlessly over the existing glass container without rendering a black box.
           <Animated.View
             entering={FadeInDown.duration(400)}
             exiting={FadeOutUp.duration(300)}
@@ -1258,7 +1227,7 @@ const styles = StyleSheet.create({
     padding: 80,
     paddingBottom: 150,
     flexGrow: 1,
-    justifyContent: 'center', // FIX: Perfectly centers the bento cards vertically on Web/Desktop
+    justifyContent: 'center',
   },
   mobileScroll: { flex: 1 },
   mobileScrollContent: {

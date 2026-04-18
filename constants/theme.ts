@@ -13,7 +13,10 @@ export const THEME = {
       pink: '#FF007F',
       purple: '#8A2BE2',
       orange: '#FF4500',
-      navy: '#000f2e'
+      navy: '#000f2e',
+      red: '#FF0000',
+      obsidian: '#F59E0B',
+      green: '#1BA16F',
     },
     text: {
       primary: '#FFFFFF',

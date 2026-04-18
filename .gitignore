@@ -52,6 +52,9 @@ supabase/db/data/
 *.supabase-db-audit-report.md
 .STRUCTURE.md
 STRUCTURE.md
+GEMINI.md
+.GEMINI.md
+
 repomix-output.xml
 repomix-output.md
 # Whitelist essential documentation
@@ -73,6 +76,7 @@ tmp/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
 
 # --- 8. EXPO CLI GENERATED ---
 expo-env.d.ts

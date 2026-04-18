@@ -291,51 +291,84 @@ const FloatingShape = React.memo(
 
     const renderShape = () => {
       switch (type) {
-        case 'hexagon':
+        case 'hexagon': // Isometric 3D Cube
           return (
             <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-              <Polygon
-                points="50,5 93,25 93,75 50,95 7,75 7,25"
-                fill={`${color}10`}
+              <Path
+                d="M 50 5 L 89 27.5 L 89 72.5 L 50 95 L 11 72.5 L 11 27.5 Z"
                 stroke={color}
                 strokeWidth="1.5"
-                opacity="0.4"
+                opacity="0.6"
+              />
+              <Path
+                d="M 50 50 L 50 95"
+                stroke={color}
+                strokeWidth="1.5"
+                opacity="0.6"
+              />
+              <Path
+                d="M 50 50 L 11 27.5"
+                stroke={color}
+                strokeWidth="1.5"
+                opacity="0.6"
+              />
+              <Path
+                d="M 50 50 L 89 27.5"
+                stroke={color}
+                strokeWidth="1.5"
+                opacity="0.6"
               />
             </Svg>
           );
-        case 'diamond':
+        case 'diamond': // Multi-faceted 3D Gem (FIXED VIEWBOX)
           return (
             <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-              <Polygon
-                points="50,5 95,50 50,95 5,50"
-                fill={`${color}10`}
+              <Path
+                d="M 50 5 L 90 40 L 50 95 L 10 40 Z"
                 stroke={color}
                 strokeWidth="1.5"
-                opacity="0.4"
+                opacity="0.6"
+              />
+              <Path
+                d="M 10 40 L 90 40"
+                stroke={color}
+                strokeWidth="1.5"
+                opacity="0.6"
+              />
+              <Path
+                d="M 50 5 L 30 40 L 50 95"
+                stroke={color}
+                strokeWidth="1.5"
+                opacity="0.6"
+              />
+              <Path
+                d="M 50 5 L 70 40 L 50 95"
+                stroke={color}
+                strokeWidth="1.5"
+                opacity="0.6"
               />
             </Svg>
           );
-        case 'tetrahedron':
+        case 'tetrahedron': // Translucent 4-vertex 3D Pyramid
           return (
             <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
               <Path
-                d="M 50,10 L 15,85 L 85,85 Z"
-                fill={`${color}0A`}
+                d="M 50 10 L 15 80 L 85 80 Z"
                 stroke={color}
                 strokeWidth="1.5"
-                opacity="0.4"
+                opacity="0.6"
               />
               <Path
-                d="M 50,10 L 50,60 L 15,85"
+                d="M 50 10 L 50 65 L 15 80"
                 stroke={color}
-                strokeWidth="1"
-                opacity="0.2"
+                strokeWidth="1.5"
+                opacity="0.6"
               />
               <Path
-                d="M 50,60 L 85,85"
+                d="M 50 65 L 85 80"
                 stroke={color}
-                strokeWidth="1"
-                opacity="0.2"
+                strokeWidth="1.5"
+                opacity="0.6"
               />
             </Svg>
           );
@@ -361,61 +394,90 @@ const AmbientArchitecture = React.memo(() => {
 
   // Anchors - SINGLE Wave exactly centered behind the SVG Vault icon
   const primaryX = width / 2;
-  // Vault icon sits near the top. paddingTop is ~40-60. Half vault height is 60.
-  const primaryY = Platform.OS === 'ios' ? 120 : 100;
+  const primaryY = Platform.OS === 'ios' ? 100 : 200;
 
-  const massiveWaveRadius = isDesktop ? width * 1.5 : height * 2;
-
-  // ⚙️ CUSTOMIZATION: 14000ms = 14 seconds per wave cycle
-  const GLOBAL_WAVE_DURATION = 16000;
+  const massiveWaveRadius = isDesktop ? width * 0.3 : height * 0.6;
+  const GLOBAL_WAVE_DURATION = 14000;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {/* ── ONLY ONE WAVE EMITTER (Anchored behind the Vault) ── */}
-      <WaveEmitter
-        centerX={primaryX}
-        centerY={primaryY}
-        coreSize={isDesktop ? 16 : 12}
-        color={GREEN} // Cyan core wave
-        maxWaveSize={massiveWaveRadius}
-        waveCount={4} // Emits 4 continuous ripples for a smooth, unbroken pulse
-        baseDuration={GLOBAL_WAVE_DURATION}
-      />
+      {/* ── 6 3D WIREFRAME SHAPES ── */}
 
-      {/* ── 3 MICRO-FLOATING SHAPES (Dramatically Scaled Down & Slowed Down) ── */}
+      {/* ZONE 1: Top Left - Gliding down and right */}
       <FloatingShape
         type="hexagon"
         color={CYAN}
-        size={30} // Very small
-        initialX={width * 0.4}
-        initialY={height * 0.4}
-        velocityX={0.03} // Barely drifting
-        velocityY={0.04}
-        rotationSpeed={0.08} // Barely spinning
+        size={55}
+        initialX={width * 0.15}
+        initialY={height * 0.15}
+        velocityX={0.15}
+        velocityY={0.12}
+        rotationSpeed={0.4}
       />
+
+      {/* ZONE 2: Bottom Right - Drifting up and left */}
       <FloatingShape
         type="tetrahedron"
-        color={PURPLE}
-        size={45}
-        initialX={width * 0.75}
-        initialY={height * 0.6}
-        velocityX={-0.04}
-        velocityY={-0.02}
-        rotationSpeed={-0.1}
+        color={PINK}
+        size={60}
+        initialX={width * 0.85}
+        initialY={height * 0.85}
+        velocityX={-0.12}
+        velocityY={-0.18}
+        rotationSpeed={-0.5}
       />
+
+      {/* ZONE 3: Top Right - Sinking slowly */}
+      <FloatingShape
+        type="diamond"
+        color={CYAN}
+        size={45}
+        initialX={width * 0.8}
+        initialY={height * 0.2}
+        velocityX={-0.1}
+        velocityY={0.2}
+        rotationSpeed={0.6}
+      />
+
+      {/* ZONE 4: Bottom Left - Rising gracefully */}
+      <FloatingShape
+        type="hexagon"
+        color={PINK}
+        size={50}
+        initialX={width * 0.15}
+        initialY={height * 0.8}
+        velocityX={0.14}
+        velocityY={-0.15}
+        rotationSpeed={-0.4}
+      />
+
+      {/* ZONE 5: Mid-Left Edge - Drifting across horizontally */}
+      <FloatingShape
+        type="tetrahedron"
+        color={CYAN}
+        size={55}
+        initialX={width * 0.05}
+        initialY={height * 0.5}
+        velocityX={0.2}
+        velocityY={0.05}
+        rotationSpeed={0.5}
+      />
+
+      {/* ZONE 6: Mid-Right Edge - Pushing inwards */}
       <FloatingShape
         type="diamond"
         color={PINK}
-        size={25} // Tiny accent
-        initialX={width * 0.4}
-        initialY={height * 0.8}
-        velocityX={0.05}
-        velocityY={-0.03}
-        rotationSpeed={0.15}
+        size={48}
+        initialX={width * 0.95}
+        initialY={height * 0.5}
+        velocityX={-0.18}
+        velocityY={-0.08}
+        rotationSpeed={-0.7}
       />
     </View>
   );
 });
+AmbientArchitecture.displayName = 'AmbientArchitecture';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // MODULE 3: NATIVE SVG ANIMATION (THE VAULT)

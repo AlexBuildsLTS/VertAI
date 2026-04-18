@@ -55,11 +55,17 @@ import Animated, {
 
 // ─── THEME CONSTANTS (Liquid Neon) ───────────────────────────────────────────
 const THEME = {
-  cyan: '#00F0FF',
-  purple: '#8A2BE2',
+  cyan: '#00B8C7',
+  purple: '#6D4AFF',
   pink: '#FF007F',
-  green: '#32FF00',
+  green: '#1BA16F',
   obsidian: '#020205',
+  white: '#FFFFFF',
+  red: '#6b011a',
+  blue: '#00F0FF',
+  orange: '#FF6B3A',
+  lime: '#018c63',
+  yellow: '#FBBF24',
 };
 
 const IS_WEB = Platform.OS === 'web';
@@ -308,6 +314,9 @@ WaveEmitter.displayName = 'WaveEmitter';
 // ══════════════════════════════════════════════════════════════════════════════
 // MODULE 2: GEOMETRIC PHYSICS ENGINE (Hexagon, Tetrahedron, Diamond)
 // ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// MODULE 2: GEOMETRIC PHYSICS ENGINE (True 3D Wireframes)
+// ══════════════════════════════════════════════════════════════════════════════
 
 interface GeometricShapeProps {
   type: 'hexagon' | 'tetrahedron' | 'diamond';
@@ -337,16 +346,16 @@ const FloatingShape = React.memo(
     const y = useSharedValue(initialY);
     const rot = useSharedValue(0);
 
-    // 120fps UI Thread loop. Ultra-smooth movement.
+    // 120fps UI Thread loop. Speeds boosted for elegant, visible drifting.
     useFrameCallback((frameInfo) => {
       if (frameInfo.timeSincePreviousFrame === null) return;
-      const dt = frameInfo.timeSincePreviousFrame / 16.66;
+      const dt = frameInfo.timeSincePreviousFrame / 16.66; // Normalize to 60fps delta
 
       x.value += velocityX * dt;
       y.value += velocityY * dt;
       rot.value += rotationSpeed * dt;
 
-      // Smooth Boundary Wrap
+      // Smooth Boundary Wrap (Infinite flow off-screen)
       if (x.value < -size * 2) x.value = width + size;
       if (x.value > width + size * 2) x.value = -size;
       if (y.value < -size * 2) y.value = height + size;
@@ -365,52 +374,30 @@ const FloatingShape = React.memo(
 
     const renderShape = () => {
       switch (type) {
-        case 'hexagon':
+        case 'hexagon': // Isometric 3D Cube
           return (
             <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-              <Polygon
-                points="50,5 93,25 93,75 50,95 7,75 7,25"
-                fill={`${color}10`}
-                stroke={color}
-                strokeWidth="1.5"
-                opacity="0.4"
-              />
+              <Path d="M 50 5 L 89 27.5 L 89 72.5 L 50 95 L 11 72.5 L 11 27.5 Z" stroke={color} strokeWidth="1.5" opacity="0.6" />
+              <Path d="M 50 50 L 50 95" stroke={color} strokeWidth="1.5" opacity="0.6" />
+              <Path d="M 50 50 L 11 27.5" stroke={color} strokeWidth="1.5" opacity="0.6" />
+              <Path d="M 50 50 L 89 27.5" stroke={color} strokeWidth="1.5" opacity="0.6" />
             </Svg>
           );
-        case 'diamond':
+        case 'diamond': // Multi-faceted 3D Gem (FIXED VIEWBOX)
           return (
             <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-              <Polygon
-                points="50,5 95,50 50,95 5,50"
-                fill={`${color}10`}
-                stroke={color}
-                strokeWidth="1.5"
-                opacity="0.4"
-              />
+              <Path d="M 50 5 L 90 40 L 50 95 L 10 40 Z" stroke={color} strokeWidth="1.5" opacity="0.6" />
+              <Path d="M 10 40 L 90 40" stroke={color} strokeWidth="1.5" opacity="0.6" />
+              <Path d="M 50 5 L 30 40 L 50 95" stroke={color} strokeWidth="1.5" opacity="0.6" />
+              <Path d="M 50 5 L 70 40 L 50 95" stroke={color} strokeWidth="1.5" opacity="0.6" />
             </Svg>
           );
-        case 'tetrahedron':
+        case 'tetrahedron': // Translucent 4-vertex 3D Pyramid
           return (
             <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-              <Path
-                d="M 50,10 L 15,85 L 85,85 Z"
-                fill={`${color}0A`}
-                stroke={color}
-                strokeWidth="1.5"
-                opacity="0.4"
-              />
-              <Path
-                d="M 50,10 L 50,60 L 15,85"
-                stroke={color}
-                strokeWidth="1"
-                opacity="0.2"
-              />
-              <Path
-                d="M 50,60 L 85,85"
-                stroke={color}
-                strokeWidth="1"
-                opacity="0.2"
-              />
+              <Path d="M 50 10 L 15 80 L 85 80 Z" stroke={color} strokeWidth="1.5" opacity="0.6" />
+              <Path d="M 50 10 L 50 65 L 15 80" stroke={color} strokeWidth="1.5" opacity="0.6" />
+              <Path d="M 50 65 L 85 80" stroke={color} strokeWidth="1.5" opacity="0.6" />
             </Svg>
           );
       }
@@ -433,61 +420,103 @@ const AmbientArchitecture = React.memo(() => {
   const { width, height } = Dimensions.get('window');
   const isDesktop = width >= 1024;
 
-  // Anchors - SINGLE Wave in the center.
+  // Anchors - SINGLE Wave exactly centered behind the SVG Vault icon
   const primaryX = width / 2;
-  const primaryY = isDesktop ? 160 : 180; // centered behind the SVG hero icon
+  const primaryY = Platform.OS === 'ios' ? 100 : 200;
 
-  const massiveWaveRadius = isDesktop ? width * 1.2 : height * 1.8;
-  const GLOBAL_WAVE_DURATION = 16000; // wave seconds
+  const massiveWaveRadius = isDesktop ? width * 0.3 : height * 0.6;
+  const GLOBAL_WAVE_DURATION = 14000;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {/* ── ONLY ONE WAVE EMITTER (Centered) ── */}
+      {/* ── ONLY ONE WAVE EMITTER (Anchored behind the Vault) ── */}
       <WaveEmitter
         centerX={primaryX}
         centerY={primaryY}
-        coreSize={isDesktop ? 16 : 12}
-        color={THEME.pink} // Cyan core wave
+        coreSize={isDesktop ? 10 : 6}
+        color={THEME.blue} // Core Wave
         maxWaveSize={massiveWaveRadius}
-        waveCount={4}
+        waveCount={1}
         baseDuration={GLOBAL_WAVE_DURATION}
       />
 
-      {/* ── 3 FLOATING SHAPES (Scaled Down & Slowed Down) ── */}
+      {/* ── 6 3D WIREFRAME SHAPES (Perfectly Scattered & Flowing) ── */}
+      
+      {/* ZONE 1: Top Left - Gliding down and right */}
       <FloatingShape
         type="hexagon"
-        color={THEME.cyan}
-        size={45} // Reduced from 80/120
-        initialX={width * 0.2}
-        initialY={height * 0.3}
-        velocityX={0.06} // Slower drift
-        velocityY={0.08}
-        rotationSpeed={0.15} // Slower spin
+        color={THEME.blue}
+        size={55}
+        initialX={width * 0.15}
+        initialY={height * 0.15}
+        velocityX={0.15} 
+        velocityY={0.12}
+        rotationSpeed={0.4}
       />
+
+      {/* ZONE 2: Bottom Right - Drifting up and left */}
       <FloatingShape
         type="tetrahedron"
-        color={THEME.purple}
-        size={55} // Reduced from 90/140
-        initialX={width * 0.75}
-        initialY={height * 0.6}
-        velocityX={-0.07} // Slower drift
-        velocityY={-0.05}
-        rotationSpeed={-0.2} // Slower spin
+        color={THEME.pink}
+        size={60}
+        initialX={width * 0.85}
+        initialY={height * 0.85}
+        velocityX={-0.12}
+        velocityY={-0.18}
+        rotationSpeed={-0.5}
       />
+
+      {/* ZONE 3: Top Right - Sinking slowly */}
       <FloatingShape
         type="diamond"
-        color={THEME.pink}
-        size={35} // Reduced from 70/100
-        initialX={width * 0.4}
-        initialY={height * 0.8}
-        velocityX={0.09} // Slower drift
-        velocityY={-0.06}
-        rotationSpeed={0.25} // Slower spin
+        color={THEME.cyan}
+        size={45}
+        initialX={width * 0.80}
+        initialY={height * 0.20}
+        velocityX={-0.10}
+        velocityY={0.20}
+        rotationSpeed={0.6}
+      />
+
+      {/* ZONE 4: Bottom Left - Rising gracefully */}
+      <FloatingShape
+        type="hexagon"
+        color={THEME.lime}
+        size={50}
+        initialX={width * 0.15}
+        initialY={height * 0.80}
+        velocityX={0.14}
+        velocityY={-0.15}
+        rotationSpeed={-0.4}
+      />
+
+      {/* ZONE 5: Mid-Left Edge - Drifting across horizontally */}
+      <FloatingShape
+        type="tetrahedron"
+        color={THEME.orange}
+        size={55}
+        initialX={width * 0.05}
+        initialY={height * 0.50}
+        velocityX={0.20}
+        velocityY={0.05}
+        rotationSpeed={0.5}
+      />
+
+      {/* ZONE 6: Mid-Right Edge - Pushing inwards */}
+      <FloatingShape
+        type="diamond"
+        color={THEME.red}
+        size={48}
+        initialX={width * 0.95}
+        initialY={height * 0.50}
+        velocityX={-0.18}
+        velocityY={-0.08}
+        rotationSpeed={-0.7}
       />
     </View>
   );
 });
-
+AmbientArchitecture.displayName = 'AmbientArchitecture';
 // ══════════════════════════════════════════════════════════════════════════════
 // MODULE 3: DASHBOARD UI & INPUT ROUTING
 // ══════════════════════════════════════════════════════════════════════════════
@@ -717,7 +746,7 @@ export default function DashboardScreen() {
     (mutationError as Error)?.message || videoData?.error_message;
 
   return (
-    <SafeAreaView className="flex-1 bg-[#010120d2]">
+    <SafeAreaView className="flex-1 bg-[#01091ae7]">
       {/* ── THE ISOLATED AMBIENT KERNEL ── */}
       {/* This renders UNDER everything and physically cannot intercept gestures */}
       <AmbientArchitecture />
@@ -742,7 +771,7 @@ export default function DashboardScreen() {
               <View className="items-center mb-10 md:mb-16">
                 <View className="flex-row items-center gap-3 px-4 py-2 mb-4 border rounded-full bg-gradient-to-r from-[#00F0FF]/30 to-[#8A2BE2]/30 border-white/10">
                   <SmallBadgeIcon width={20} height={20} color={THEME.cyan} />
-                  <Text className="text-sm font-bold tracking-wide text-[#00F0FF]">
+                  <Text className="text-sm font-bold tracking-wide text-[#00a2ff]">
                     VeraxAI Engine 1.0
                   </Text>
                 </View>
@@ -896,7 +925,7 @@ export default function DashboardScreen() {
 
                   {displayError && (
                     <View className="p-5 mt-6 border bg-rose-500/10 border-rose-500/20 rounded-2xl">
-                      <Text className="mb-2 text-xs font-bold tracking-widest uppercase text-pink-400">
+                      <Text className="mb-2 text-xs font-bold tracking-widest text-pink-400 uppercase">
                         Error Encountered
                       </Text>
                       <Text className="text-sm leading-5 text-rose-300/80">
