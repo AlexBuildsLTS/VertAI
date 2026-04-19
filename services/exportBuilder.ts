@@ -1,12 +1,14 @@
 /**
  * services/exportBuilder.ts
- * VertaxAIExport & Formatting Engine
- * ----------------------------------------------------------------------------
+ * VeraxAI Export & Formatting Engine
+ * ══════════════════════════════════════════════════════════════════════════════
  * FEATURES:
  * - 100% Type-Safe: Defensive parsing for Supabase JSON fields.
- * - Unified Output: TXT and MD files contain BOTH the AI Summaries and the Raw Transcript.
+ * - Unified Output: TXT and MD files contain BOTH the AI Summaries and Raw Transcript.
  * - Smart Fallbacks: Auto-calculates SRT/VTT timestamps if native segments fail.
- * - Triggers browser downloads on Web, and Native Share Sheets on iOS/Android.
+ * - Cross-Platform Downloads: Triggers browser downloads on Web, and Native Share Sheets
+ * (via expo-sharing & cacheDirectory) on iOS/Android APKs to bypass permission locks.
+ * ══════════════════════════════════════════════════════════════════════════════
  */
 
 import { Platform } from 'react-native';
@@ -39,7 +41,6 @@ const MIME_TYPES: Record<ExportFormat, string> = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 };
 
-// Defensive JSON parsers to prevent crashes from malformed Supabase JSON columns
 const safeArray = <T>(data: unknown): T[] => (Array.isArray(data) ? (data as T[]) : []);
 
 // ─── PLAIN TEXT ENGINE ( RAW TXT) ───────────────────────────────────────
@@ -80,14 +81,12 @@ function exportToTxt(data: ExportData, options: ExportOptions): string {
   lines.push('─── VERBATIM DATA STREAM  ──────────────────────────────\n');
 
   if (options.includeTimestamps && data.segments && data.segments.length > 0) {
-    // If segments exist, map them with timestamps
     data.segments.forEach((segment) => {
       const timestamp = formatTimestamp(segment.start);
       const speaker = options.includeSpeakers && segment.speaker ? `[SPK_${segment.speaker}] ` : '';
       lines.push(`[${timestamp}] ${speaker}${segment.text}`);
     });
   } else {
-    // Smart Paragraphing for pure raw text
     const paragraphs = transcript.transcript_text.split(/(?<=[.!?])\s+/);
     let currentParagraph = '';
     paragraphs.forEach((sentence, i) => {
@@ -144,13 +143,11 @@ function exportToMarkdown(data: ExportData, options: ExportOptions): string {
   lines.push('## Verbatim Data Stream\n');
 
   if (options.includeTimestamps && data.segments && data.segments.length > 0) {
-    // FIXED: Ensured the loop variable matches perfectly to avoid line 148 crash
     data.segments.forEach((segment) => {
       const speaker = options.includeSpeakers && segment.speaker ? `**[SPK_${segment.speaker}]** ` : '';
       lines.push(`*\\[${formatTimestamp(segment.start)}\\]* ${speaker}${segment.text}  `);
     });
   } else {
-    // Smart Paragraphing for Markdown
     const paragraphs = transcript.transcript_text.split(/(?<=[.!?])\s+/);
     let currentParagraph = '';
     paragraphs.forEach((sentence, i) => {
@@ -301,35 +298,40 @@ export async function downloadExport(result: ExportResult): Promise<void> {
       throw new Error('Failed to trigger file download in browser.');
     }
   } else {
-    // Native Mobile Handling (iOS / Android)
+    // Native Mobile Handling (iOS / Android APK)
     try {
-      // BYPASS: Force TypeScript to ignore the broken local VSCode typings
-      const FS = FileSystem as any;
-      const Share = Sharing as any;
+      // BYPASS: Cast to 'any' to force compilation despite outdated local VSCode typings.
+      // This is necessary because expo-file-system types are sometimes stale in the local cache.
+      const fsExt: any = FileSystem;
+      const shareExt: any = Sharing;
 
-      if (!FS.documentDirectory) {
-        throw new Error('Local file system is not accessible on this device.');
+      // CRITICAL: We MUST use cacheDirectory, not documentDirectory, for temporary files 
+      // meant for sharing to avoid scoped storage permission crashes on Android 11+.
+      if (!fsExt.cacheDirectory) {
+        throw new Error('Cache directory is not accessible on this device.');
       }
 
-      const fileUri = `${FS.documentDirectory}${result.filename}`;
+      const fileUri = `${fsExt.cacheDirectory}${result.filename}`;
 
-      // Write the content to the local device file system using raw 'utf8' string
-      await FS.writeAsStringAsync(fileUri, result.content, {
-        encoding: 'utf8',
+      // Write to Phone Cache
+      await fsExt.writeAsStringAsync(fileUri, result.content, {
+        encoding: 'utf8', // Hardcoded string to bypass EncodingType typing error
       });
 
-      // Prompt the user with the native Share Sheet to save/send the file
-      if (await Share.isAvailableAsync()) {
-        await Share.shareAsync(fileUri, {
+      // Trigger Android Share / Save Dialog
+      const isAvailable = await shareExt.isAvailableAsync();
+      if (isAvailable) {
+        await shareExt.shareAsync(fileUri, {
           mimeType: result.mimeType,
-          dialogTitle: 'Export Intelligence Dossier',
+          dialogTitle: `Save ${result.filename}`,
+          UTI: result.mimeType, // Better classification for iOS
         });
       } else {
         throw new Error('Native sharing is not available on this device.');
       }
     } catch (error) {
       console.error('[ExportBuilder] Mobile sharing failed:', error);
-      throw error; // Throw so the UI shows a notification/toast 
+      throw error; // Let the UI catch and display the alert
     }
   }
 }
@@ -342,4 +344,3 @@ export const ExportBuilder = {
   formats: ['txt', 'srt', 'vtt', 'json', 'md'] as ExportFormat[],
   mimeTypes: MIME_TYPES
 };
-

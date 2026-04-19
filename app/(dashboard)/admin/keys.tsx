@@ -1,17 +1,16 @@
 /**
  * app/(dashboard)/admin/keys.tsx
  * VeraxAI — Enterprise API Key Vault & Telemetry Analytics
- * ----------------------------------------------------------------------------
- * MODULE OVERVIEW:
- * - AMBIENT ENGINE: Liquid Neon background parity with admin/index.tsx
- * - ALWAYS-VISIBLE DATA: Exact token counts permanently rendered in chart legends.
- * - MULTI-LINE VELOCITY: 7D velocity with smooth Bezier Splines and X/Y Crosshairs.
- * - ZERO-JUMP TOGGLING: Global axis scaling prevents layout shifts during legend toggles.
- * - VAULT: Secure fallback key injection.
- * ----------------------------------------------------------------------------
+ * ══════════════════════════════════════════════════════════════════════════════
+ * PROTOCOL:
+ * 1. NEBULA AMBIENT ENGINE: Parity with settings/index. 120fps UI-thread physics.
+ * 2. CRASH-PROOF CHARTS: SVG handles static rendering; Reanimated handles HTML overlays.
+ * 3. ADAPTIVE SCALING: Mobile-optimized LED bars and Bezier splines.
+ * 4. HIGH-FIDELITY SVG: Animated API core replaces generic text headers.
+ * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -23,9 +22,8 @@ import {
   Platform,
   Dimensions,
   KeyboardAvoidingView,
-  Image,
   Pressable,
-  Easing,
+  StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -40,54 +38,67 @@ import {
 } from 'lucide-react-native';
 import Animated, {
   useAnimatedStyle,
-  useAnimatedProps,
   withSpring,
   withTiming,
-  FadeInUp,
   interpolate,
   useSharedValue,
   withDelay,
   withRepeat,
+  Easing,
+  useFrameCallback,
+  withSequence,
 } from 'react-native-reanimated';
-import Svg, { Path, Circle, Line } from 'react-native-svg';
+import Svg, {
+  Path,
+  Circle,
+  Defs,
+  LinearGradient,
+  Stop,
+  G,
+  Rect,
+} from 'react-native-svg';
 import { supabase } from '../../../lib/supabase/client';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { FadeIn } from '../../../components/animations/FadeIn';
 import { Database } from '../../../types/database/database.types';
 
-// ─── CONFIGURATION: PRESET COLORS FOR KNOWN KEYS ─────────────────────────────
-// NOTE: This does NOT hardcode keys into your system. It simply ensures your
-// primary system keys always match your specific brand colors. Any new keys
-// added via the vault will automatically generate a dynamic color.
-const PRESET_COLORS: Record<string, string> = {
-  ENV_MASTER: '#00F0FF', // Neon Cyan
-  GEMINIAPI_KEY_1: '#FF007F', // Neon Pink
-  GEMINIAPI_KEY_2: '#32FF00', // Neon Green
-  GEMINIAPI_KEY_3: '#8A2BE2', // Electric Purple
-  GEMINIAPI_KEY_4: '#F59E0B', // Warning Amber
+// ─── THEME CONSTANTS (Liquid Neon) ───────────────────────────────────────────
+const THEME = {
+  obsidian: '#1F042E',
+  cyan: '#00F0FF',
+  purple: '#8A2BE2',
+  pink: '#FF007F',
+  green: '#32FF00',
+  gold: '#FFD700',
+  danger: '#FF3366',
+  navy: '#050B14',
+  lightPurple: '#6A5DF1',
 };
 
+const IS_WEB = Platform.OS === 'web';
+
+const PRESET_COLORS: Record<string, string> = {
+  ENV_MASTER: THEME.cyan,
+  GEMINIAPI_KEY_1: THEME.pink,
+  GEMINIAPI_KEY_2: THEME.green,
+  GEMINIAPI_KEY_3: THEME.purple,
+  GEMINIAPI_KEY_4: THEME.gold,
+};
+
+// Deterministic color assignment for unknown keys
 const getColorForKey = (keyName: string) => {
   if (PRESET_COLORS[keyName]) return PRESET_COLORS[keyName];
   let hash = 0;
   for (let i = 0; i < keyName.length; i++)
     hash = keyName.charCodeAt(i) + ((hash << 5) - hash);
   const fallbackColors = [
-    '#00F0FF',
-    '#FF007F',
-    '#32FF00',
-    '#8A2BE2',
-    '#F59E0B',
+    THEME.cyan,
+    THEME.pink,
+    THEME.green,
+    THEME.purple,
+    THEME.gold,
   ];
   return fallbackColors[Math.abs(hash) % fallbackColors.length];
-};
-
-const THEME = {
-  obsidian: '#020205',
-  cyan: '#00F0FF',
-  danger: '#FF007F',
-  success: '#32FF00',
-  purple: '#8A2BE2',
 };
 
 const strictInputStyle = {
@@ -97,79 +108,287 @@ const strictInputStyle = {
   paddingVertical: 0,
   margin: 0,
   textAlignVertical: 'center',
-  ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
+  ...(IS_WEB ? { outlineStyle: 'none' } : {}),
 } as any;
 
-// ─── AMBIENT ORB ENGINE ──────────────────────────────────────────────────────
-const AmbientOrb = ({
-  color,
-  size,
-  top,
-  left,
-  right,
-  bottom,
-  opacity = 0.05,
-  delay = 0,
-}: any) => {
+// ══════════════════════════════════════════════════════════════════════════════
+// MODULE 1: NEBULA AMBIENT ENGINE (Parity with Settings)
+// ══════════════════════════════════════════════════════════════════════════════
+
+const CorePulse = React.memo(
+  ({ delay, color, size, centerX, centerY }: any) => {
+    const pulse = useSharedValue(0);
+    useEffect(() => {
+      pulse.value = withDelay(
+        delay,
+        withRepeat(
+          withTiming(1, { duration: 8000, easing: Easing.out(Easing.cubic) }),
+          -1,
+          false,
+        ),
+      );
+    }, [delay, pulse]);
+    const animatedStyle = useAnimatedStyle(() => ({
+      transform: [{ scale: interpolate(pulse.value, [0, 1], [0.8, 2.5]) }],
+      opacity: interpolate(pulse.value, [0, 0.4, 1], [0.3, 0.1, 0]),
+    }));
+    return (
+      <Animated.View
+        style={[
+          animatedStyle,
+          {
+            position: 'absolute',
+            left: centerX - size / 2,
+            top: centerY - size / 2,
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            backgroundColor: `${color}15`,
+            ...(IS_WEB ? ({ filter: 'blur(20px)' } as any) : {}),
+          },
+        ]}
+      />
+    );
+  },
+);
+CorePulse.displayName = 'CorePulse';
+
+const OrganicOrb = React.memo(
+  ({
+    color,
+    size,
+    initialX,
+    initialY,
+    speedX,
+    speedY,
+    phaseOffsetX,
+    phaseOffsetY,
+    opacityBase,
+  }: any) => {
+    const { width, height } = Dimensions.get('window');
+    const time = useSharedValue(0);
+    useFrameCallback((frameInfo) => {
+      if (frameInfo.timeSincePreviousFrame === null) return;
+      time.value += frameInfo.timeSincePreviousFrame / 1000;
+    });
+    const animatedStyle = useAnimatedStyle(() => {
+      const xOffset =
+        Math.sin(time.value * speedX + phaseOffsetX) * (width * 0.3);
+      const yOffset =
+        Math.cos(time.value * speedY + phaseOffsetY) * (height * 0.2);
+      const breathe = 1 + Math.sin(time.value * 0.5) * 0.15;
+      return {
+        transform: [
+          { translateX: initialX + xOffset },
+          { translateY: initialY + yOffset },
+          { scale: breathe },
+        ],
+        opacity: opacityBase + Math.sin(time.value * 0.5) * 0.02,
+      };
+    });
+    return (
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          {
+            position: 'absolute',
+            top: -size / 2,
+            left: -size / 2,
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            backgroundColor: color,
+            ...(IS_WEB ? ({ filter: 'blur(60px)' } as any) : {}),
+          },
+          animatedStyle,
+        ]}
+      />
+    );
+  },
+);
+OrganicOrb.displayName = 'OrganicOrb';
+
+const AmbientArchitecture = React.memo(() => {
   const { width, height } = Dimensions.get('window');
-  const drift = useSharedValue(0);
+  const isDesktop = width >= 1024;
+  const coreX = width / 2;
+  const coreY = isDesktop ? 160 : 120;
+  const basePulseSize = isDesktop ? 300 : 200;
+
+  return (
+    // STRICT TOUCH ISOLATION: zIndex: -1 prevents background from eating touches
+    <View
+      style={[StyleSheet.absoluteFill, { zIndex: -1, elevation: -1 }]}
+      pointerEvents="none"
+    >
+      <CorePulse
+        delay={0}
+        color={THEME.cyan}
+        size={basePulseSize}
+        centerX={coreX}
+        centerY={coreY}
+      />
+      <CorePulse
+        delay={2500}
+        color={THEME.purple}
+        size={basePulseSize}
+        centerX={coreX}
+        centerY={coreY}
+      />
+      <CorePulse
+        delay={5000}
+        color={THEME.pink}
+        size={basePulseSize}
+        centerX={coreX}
+        centerY={coreY}
+      />
+      <OrganicOrb
+        color={THEME.cyan}
+        size={width * 0.5}
+        initialX={width * 0.2}
+        initialY={height * 0.3}
+        speedX={0.2}
+        speedY={0.15}
+        phaseOffsetX={0}
+        phaseOffsetY={Math.PI / 2}
+        opacityBase={0.06}
+      />
+      <OrganicOrb
+        color={THEME.purple}
+        size={width * 0.6}
+        initialX={width * 0.8}
+        initialY={height * 0.6}
+        speedX={0.15}
+        speedY={0.25}
+        phaseOffsetX={Math.PI}
+        phaseOffsetY={0}
+        opacityBase={0.08}
+      />
+    </View>
+  );
+});
+AmbientArchitecture.displayName = 'AmbientArchitecture';
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODULE 2: ANIMATED API SVG HEADER
+// ══════════════════════════════════════════════════════════════════════════════
+const AnimatedApiIcon = React.memo(() => {
+  const floatY = useSharedValue(0);
+  const orbitRot = useSharedValue(0);
 
   useEffect(() => {
-    drift.value = withDelay(
-      delay,
-      withRepeat(
-        withTiming(1, { duration: 8000, easing: Easing.inOut(Easing.sin) }),
-        -1,
-        true,
+    floatY.value = withRepeat(
+      withSequence(
+        withTiming(-8, { duration: 2500, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration: 2500, easing: Easing.inOut(Easing.sin) }),
       ),
+      -1,
+      true,
     );
-  }, [delay, drift]);
+    orbitRot.value = withRepeat(
+      withTiming(360, { duration: 12000, easing: Easing.linear }),
+      -1,
+      false,
+    );
+  }, []);
 
-  const anim = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: interpolate(drift.value, [0, 1], [0, width * 0.1]) },
-      { translateY: interpolate(drift.value, [0, 1], [0, height * 0.05]) },
-      { scale: interpolate(drift.value, [0, 1], [0.9, 1.2]) },
-    ],
+  const floatStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: floatY.value }],
   }));
 
-  const blurStyle = Platform.OS === 'web' ? { filter: 'blur(80px)' } : {};
+  const orbitStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${orbitRot.value}deg` }],
+  }));
 
   return (
     <Animated.View
       style={[
         {
-          position: 'absolute',
-          width: size,
-          height: size,
-          borderRadius: size,
-          backgroundColor: color,
-          opacity,
-          top,
-          left,
-          right,
-          bottom,
-          pointerEvents: 'none',
-          ...blurStyle,
+          width: 120,
+          height: 120,
+          alignItems: 'center',
+          justifyContent: 'center',
         },
-        anim,
+        floatStyle,
       ]}
-    />
+    >
+      {/* Outer Orbiting Data Ring */}
+      <Animated.View
+        style={[{ position: 'absolute', width: 120, height: 120 }, orbitStyle]}
+      >
+        <Svg width="120" height="120" viewBox="0 0 120 120">
+          <Circle
+            cx="60"
+            cy="60"
+            r="50"
+            fill="none"
+            stroke={THEME.purple}
+            strokeWidth="2"
+            strokeDasharray="10 20"
+            opacity="0.6"
+          />
+          <Circle cx="60" cy="10" r="4" fill={THEME.pink} />
+          <Circle cx="110" cy="60" r="4" fill={THEME.cyan} />
+        </Svg>
+      </Animated.View>
+
+      {/* Core API Shield */}
+      <View style={{ width: 80, height: 80, position: 'absolute' }}>
+        <Svg width="100%" height="100%" viewBox="0 0 100 100">
+          {/* Base Shield */}
+          <Path
+            d="M 50 10 L 90 25 L 90 60 C 90 80, 50 95, 50 95 C 50 95, 10 80, 10 60 L 10 25 Z"
+            fill="rgba(0, 240, 255, 0.1)"
+            stroke={THEME.cyan}
+            strokeWidth="3"
+          />
+          {/* Inner API Text Box */}
+          <Rect
+            x="25"
+            y="35"
+            width="50"
+            height="25"
+            rx="4"
+            fill={THEME.navy}
+            stroke={THEME.gold}
+            strokeWidth="2"
+          />
+          <Path
+            d="M 35 42 L 40 42 L 40 52 M 35 47 L 40 47"
+            stroke={THEME.gold}
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+          <Path
+            d="M 45 42 L 50 42 C 53 42, 53 47, 50 47 L 45 47 L 45 52"
+            fill="none"
+            stroke={THEME.gold}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <Path
+            d="M 58 42 L 63 42 M 60.5 42 L 60.5 52 M 58 52 L 63 52"
+            stroke={THEME.gold}
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </Svg>
+      </View>
+    </Animated.View>
   );
-};
+});
+AnimatedApiIcon.displayName = 'AnimatedApiIcon';
 
-// ─── ANIMATED SVG COMPONENTS ─────────────────────────────────────────────────
-const AnimatedPath = Animated.createAnimatedComponent(Path);
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-
-// ─── TYPE DEFINITIONS ────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// TYPE DEFINITIONS & DATA BUILDERS
+// ══════════════════════════════════════════════════════════════════════════════
 type SystemKey = Database['public']['Tables']['system_api_keys']['Row'];
 type RawLog = {
   tokens_consumed: number;
   created_at: string;
   metadata: { api_key_name: string } | null;
 };
-
 type ChartDataPoint = {
   label: string;
   fullDate: string;
@@ -177,7 +396,6 @@ type ChartDataPoint = {
   breakdown: { keyName: string; tokens: number; color: string }[];
 };
 
-// ─── TIMELINE GENERATORS ─────────────────────────────────────────────────────
 const buildDailyData = (logs: RawLog[]): ChartDataPoint[] => {
   const bins = [];
   const today = new Date();
@@ -188,25 +406,20 @@ const buildDailyData = (logs: RawLog[]): ChartDataPoint[] => {
     const label = d.toLocaleDateString('en-US', { weekday: 'short' });
     bins.push({ label, fullDate: datePrefix, prefix: datePrefix });
   }
-
   return bins.map((bin) => {
     const binLogs = logs.filter((log) => log.created_at.startsWith(bin.prefix));
     const keyMap: Record<string, number> = {};
     let total = 0;
-
     binLogs.forEach((log) => {
-      // @ts-ignore
       const keyName = log.metadata?.api_key_name || 'UNKNOWN_KEY';
       keyMap[keyName] = (keyMap[keyName] || 0) + (log.tokens_consumed || 0);
       total += log.tokens_consumed || 0;
     });
-
     const breakdown = Object.keys(keyMap).map((keyName) => ({
       keyName,
       tokens: keyMap[keyName],
       color: getColorForKey(keyName),
     }));
-
     return { label: bin.label, fullDate: bin.fullDate, total, breakdown };
   });
 };
@@ -228,40 +441,35 @@ const buildMonthlyData = (logs: RawLog[]): ChartDataPoint[] => {
     'Nov',
     'Dec',
   ];
-
   for (let i = 0; i < 12; i++) {
     const monthPrefix = `${currentYear}-${String(i + 1).padStart(2, '0')}`;
-    const label = monthsArr[i];
     bins.push({
-      label,
-      fullDate: `${label} ${currentYear}`,
+      label: monthsArr[i],
+      fullDate: `${monthsArr[i]} ${currentYear}`,
       prefix: monthPrefix,
     });
   }
-
   return bins.map((bin) => {
     const binLogs = logs.filter((log) => log.created_at.startsWith(bin.prefix));
     const keyMap: Record<string, number> = {};
     let total = 0;
-
     binLogs.forEach((log) => {
-      // @ts-ignore
       const keyName = log.metadata?.api_key_name || 'UNKNOWN_KEY';
       keyMap[keyName] = (keyMap[keyName] || 0) + (log.tokens_consumed || 0);
       total += log.tokens_consumed || 0;
     });
-
     const breakdown = Object.keys(keyMap).map((keyName) => ({
       keyName,
       tokens: keyMap[keyName],
       color: getColorForKey(keyName),
     }));
-
     return { label: bin.label, fullDate: bin.fullDate, total, breakdown };
   });
 };
 
+// PERFECT BEZIER SMOOTHING
 const getSmoothPath = (points: { x: number; y: number }[]) => {
+  if (points.length === 0) return '';
   const controlPoint = (
     current: any,
     previous: any,
@@ -270,19 +478,15 @@ const getSmoothPath = (points: { x: number; y: number }[]) => {
   ) => {
     const p = previous || current;
     const n = next || current;
-    const smoothing = 0.2;
-    const o = {
-      length:
-        Math.sqrt(Math.pow(n.x - p.x, 2) + Math.pow(n.y - p.y, 2)) * smoothing,
-      angle: Math.atan2(n.y - p.y, n.x - p.x),
-    };
-    const angle = o.angle + (reverse ? Math.PI : 0);
+    const smoothing = 0.15; // Lower = tighter curves, higher = looser
+    const angle = Math.atan2(n.y - p.y, n.x - p.x) + (reverse ? Math.PI : 0);
+    const length =
+      Math.sqrt(Math.pow(n.x - p.x, 2) + Math.pow(n.y - p.y, 2)) * smoothing;
     return {
-      x: current.x + Math.cos(angle) * o.length,
-      y: current.y + Math.sin(angle) * o.length,
+      x: current.x + Math.cos(angle) * length,
+      y: current.y + Math.sin(angle) * length,
     };
   };
-
   return points.reduce((acc, point, i, a) => {
     if (i === 0) return `M ${point.x},${point.y}`;
     const cps = controlPoint(a[i - 1], a[i - 2], point, false);
@@ -291,86 +495,49 @@ const getSmoothPath = (points: { x: number; y: number }[]) => {
   }, '');
 };
 
-// ─── MODULE 1: SMOOTH MULTI-LINE CHART ───────────────────────────────────────
-const SvgLineNode = ({
-  line,
-  isHidden,
-  selectedIndex,
-}: {
-  line: any;
-  isHidden: boolean;
-  selectedIndex: number | null;
-}) => {
-  const animatedPathProps = useAnimatedProps(() => ({
-    opacity: withTiming(isHidden ? 0 : 0.8, { duration: 300 }),
-  }));
-
-  return (
-    <React.Fragment>
-      <AnimatedPath
-        animatedProps={animatedPathProps}
-        d={line.pathStr}
-        stroke={line.color}
-        strokeWidth={3}
-        fill="none"
-        strokeLinecap="round"
-      />
-      {line.points.map((p: any, i: number) => {
-        const isActive = selectedIndex === i;
-        const circleProps = useAnimatedProps(() => ({
-          opacity: withTiming(isHidden ? 0 : isActive ? 1 : 0.6, {
-            duration: 200,
-          }),
-          r: withSpring(isActive ? 6 : 4, { damping: 15 }),
-        }));
-        return (
-          <AnimatedCircle
-            key={`dot-${i}`}
-            cx={p.x}
-            cy={p.y}
-            fill={THEME.obsidian}
-            stroke={line.color}
-            strokeWidth={3}
-            animatedProps={circleProps}
-          />
-        );
-      })}
-    </React.Fragment>
-  );
+const getFillPath = (
+  points: { x: number; y: number }[],
+  pathStr: string,
+  viewHeight: number,
+  padY: number,
+) => {
+  if (!points.length) return '';
+  const first = points[0];
+  const last = points[points.length - 1];
+  const bottomY = viewHeight - padY;
+  return `${pathStr} L ${last.x},${bottomY} L ${first.x},${bottomY} Z`;
 };
 
+// ══════════════════════════════════════════════════════════════════════════════
+// MODULE 3: UPGRADED MULTI-LINE VELOCITY CHART
+// ══════════════════════════════════════════════════════════════════════════════
 const SvgMultiLineChart = ({
   data,
   allUniqueKeys,
   hiddenKeys,
   selectedIndex,
   setSelectedIndex,
-}: {
-  data: ChartDataPoint[];
-  allUniqueKeys: Set<string>;
-  hiddenKeys: Set<string>;
-  selectedIndex: number | null;
-  setSelectedIndex: (idx: number | null) => void;
-}) => {
+}: any) => {
   const VIEWBOX_W = 1000;
-  const VIEWBOX_H = 260;
+  const VIEWBOX_H = 280;
   const PADDING_Y = 40;
-  const PADDING_X = 50;
+  const PADDING_X = 40;
 
-  const activeKeysArray = Array.from(allUniqueKeys);
-
-  const globalMaxVal = useMemo(() => {
-    return Math.max(
-      ...data.flatMap((d) => d.breakdown.map((b) => b.tokens)),
-      10,
-    );
-  }, [data]);
+  const activeKeysArray = Array.from(allUniqueKeys) as string[];
+  const globalMaxVal = useMemo(
+    () =>
+      Math.max(
+        ...data.flatMap((d: any) => d.breakdown.map((b: any) => b.tokens)),
+        10,
+      ),
+    [data],
+  );
 
   const lines = useMemo(() => {
     return activeKeysArray.map((keyName) => {
       const color = getColorForKey(keyName);
-      const points = data.map((d, i) => {
-        const b = d.breakdown.find((x) => x.keyName === keyName);
+      const points = data.map((d: any, i: number) => {
+        const b = d.breakdown.find((x: any) => x.keyName === keyName);
         const val = b ? b.tokens : 0;
         const x =
           PADDING_X + (i / (data.length - 1)) * (VIEWBOX_W - PADDING_X * 2);
@@ -380,88 +547,124 @@ const SvgMultiLineChart = ({
           (val / globalMaxVal) * (VIEWBOX_H - PADDING_Y * 2);
         return { x, y, val };
       });
-      return { keyName, color, points, pathStr: getSmoothPath(points) };
+      const pathStr = getSmoothPath(points);
+      const fillStr = getFillPath(points, pathStr, VIEWBOX_H, PADDING_Y);
+      return { keyName, color, points, pathStr, fillStr };
     });
   }, [data, activeKeysArray, globalMaxVal]);
 
   const activePoint = selectedIndex !== null ? data[selectedIndex] : null;
 
-  const crosshair = useMemo(() => {
-    if (selectedIndex === null) return null;
-    const activeX =
-      PADDING_X +
-      (selectedIndex / (data.length - 1)) * (VIEWBOX_W - PADDING_X * 2);
+  // Animated Crosshair
+  const crosshairOpacity = useSharedValue(0);
+  const crosshairX = useSharedValue(VIEWBOX_W / 2);
 
-    let highestVal = 0;
-    data[selectedIndex].breakdown.forEach((b) => {
-      if (!hiddenKeys.has(b.keyName) && b.tokens > highestVal)
-        highestVal = b.tokens;
-    });
-    const activeY =
-      VIEWBOX_H -
-      PADDING_Y -
-      (highestVal / globalMaxVal) * (VIEWBOX_H - PADDING_Y * 2);
+  useEffect(() => {
+    if (selectedIndex !== null) {
+      crosshairOpacity.value = withTiming(1, { duration: 200 });
+      const targetX =
+        PADDING_X +
+        (selectedIndex / (data.length - 1)) * (VIEWBOX_W - PADDING_X * 2);
+      crosshairX.value = withSpring(targetX, { damping: 20, stiffness: 150 });
+    } else {
+      crosshairOpacity.value = withTiming(0, { duration: 200 });
+    }
+  }, [selectedIndex, data]);
 
-    return { x: activeX, y: activeY };
-  }, [selectedIndex, data, hiddenKeys, globalMaxVal]);
+  const crosshairStyle = useAnimatedStyle(() => ({
+    opacity: crosshairOpacity.value,
+    transform: [{ translateX: crosshairX.value }],
+  }));
+
+  const tooltipOpacity = useAnimatedStyle(() => ({
+    opacity: crosshairOpacity.value,
+  }));
 
   return (
     <View className="relative w-full h-full">
-      <View className="absolute inset-0 flex-col justify-between py-[15%]">
-        {[1, 2, 3].map((i) => (
+      {/* Background Grid */}
+      <View className="absolute inset-0 flex-col justify-between py-[12%] z-0">
+        {[1, 2, 3, 4].map((i) => (
           <View key={i} className="w-full h-px bg-white/[0.03]" />
         ))}
       </View>
 
+      {/* SVG Layer (STATIC rendering to prevent Android crash) */}
       <Svg
         width="100%"
         height="100%"
         viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
         preserveAspectRatio="none"
+        style={{ zIndex: 10 }}
       >
-        {crosshair && (
-          <React.Fragment>
-            <Line
-              x1={crosshair.x}
-              y1={PADDING_Y / 2}
-              x2={crosshair.x}
-              y2={VIEWBOX_H - PADDING_Y / 2}
-              stroke="#00F0FF"
-              strokeWidth={2}
-              opacity={0.3}
-              strokeDasharray="6 6"
-            />
-            <Line
-              x1={PADDING_X / 2}
-              y1={crosshair.y}
-              x2={VIEWBOX_W - PADDING_X / 2}
-              y2={crosshair.y}
-              stroke="#00F0FF"
-              strokeWidth={2}
-              opacity={0.3}
-              strokeDasharray="6 6"
-            />
-          </React.Fragment>
-        )}
+        <Defs>
+          {lines.map((line) => (
+            <LinearGradient
+              key={`grad-${line.keyName}`}
+              id={`grad-${line.keyName}`}
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="1"
+            >
+              <Stop offset="0%" stopColor={line.color} stopOpacity="0.25" />
+              <Stop offset="100%" stopColor={line.color} stopOpacity="0" />
+            </LinearGradient>
+          ))}
+        </Defs>
 
-        {lines.map((line) => (
-          <SvgLineNode
-            key={line.keyName}
-            line={line}
-            isHidden={hiddenKeys.has(line.keyName)}
-            selectedIndex={selectedIndex}
-          />
-        ))}
+        {lines.map((line) => {
+          if (hiddenKeys.has(line.keyName)) return null;
+          return (
+            <React.Fragment key={line.keyName}>
+              <Path d={line.fillStr} fill={`url(#grad-${line.keyName})`} />
+              <Path
+                d={line.pathStr}
+                stroke={line.color}
+                strokeWidth={3}
+                fill="none"
+                strokeLinecap="round"
+              />
+              {line.points.map((p: any, i: number) => (
+                <Circle
+                  key={`dot-${i}`}
+                  cx={p.x}
+                  cy={p.y}
+                  r={4}
+                  fill={THEME.obsidian}
+                  stroke={line.color}
+                  strokeWidth={2}
+                />
+              ))}
+            </React.Fragment>
+          );
+        })}
       </Svg>
 
-      <View className="absolute inset-0 flex-row">
-        {data.map((point, idx) => {
+      {/* Animated HTML Crosshair Layer */}
+      <Animated.View
+        style={[
+          crosshairStyle,
+          {
+            position: 'absolute',
+            top: 10,
+            bottom: 20,
+            width: 2,
+            backgroundColor: THEME.cyan,
+            zIndex: 20,
+          },
+        ]}
+      />
+
+      {/* Touch Interceptor Grid */}
+      <View className="absolute inset-0 z-30 flex-row">
+        {data.map((point: any, idx: number) => {
           const isActive = selectedIndex === idx;
           return (
             <View key={idx} className="items-center justify-end flex-1 h-full">
               <Pressable
-                className="absolute inset-0 z-10"
-                {...(Platform.OS === 'web'
+                className="absolute inset-0"
+                {...(IS_WEB
                   ? {
                       onHoverIn: () => setSelectedIndex(idx),
                       onHoverOut: () => setSelectedIndex(null),
@@ -472,7 +675,7 @@ const SvgMultiLineChart = ({
                     })}
               />
               <Text
-                className={`mb-[-24px] text-[10px] uppercase tracking-wider transition-colors duration-200 ${isActive ? 'text-[#00F0FF] font-black' : 'text-white/30 font-bold'}`}
+                className={`mb-[-20px] text-[10px] uppercase tracking-wider transition-colors duration-200 ${isActive ? 'text-[#00F0FF] font-black' : 'text-white/30 font-bold'}`}
               >
                 {point.label}
               </Text>
@@ -481,47 +684,56 @@ const SvgMultiLineChart = ({
         })}
       </View>
 
-      {/* Floating Tooltip */}
-      {activePoint && selectedIndex !== null && (
-        <Animated.View
-          entering={FadeInUp.springify().damping(15)}
-          className="absolute z-50 items-center justify-center pointer-events-none top-[-30px] left-0 right-0"
-        >
-          <View className="bg-[#020205]/95 border border-[#00F0FF]/30 rounded-2xl p-4 min-w-[200px] shadow-[0_10px_30px_rgba(0,240,255,0.15)] backdrop-blur-md">
-            <Text className="text-[#00F0FF] text-[10px] font-black uppercase tracking-[2px] mb-3 text-center">
-              {activePoint.fullDate}
-            </Text>
-            {activePoint.breakdown.map((b, idx) => {
-              const isHidden = hiddenKeys.has(b.keyName);
-              if (isHidden) return null;
-              return (
-                <View
-                  key={idx}
-                  className="flex-row items-center justify-between mb-1.5 gap-x-6"
-                >
-                  <View className="flex-row items-center gap-x-2">
-                    <View
-                      style={{ backgroundColor: b.color }}
-                      className="w-2.5 h-2.5 rounded-full shadow-[0_0_5px]"
-                    />
-                    <Text className="font-mono text-[11px] text-white/80">
-                      {b.keyName}
-                    </Text>
-                  </View>
-                  <Text className="text-[12px] font-black tracking-widest text-white">
-                    {b.tokens.toLocaleString()}
+      {/* Persistent Floating Tooltip */}
+      <Animated.View
+        style={[
+          tooltipOpacity,
+          {
+            position: 'absolute',
+            top: -30,
+            left: 0,
+            right: 0,
+            alignItems: 'center',
+            pointerEvents: 'none',
+            zIndex: 50,
+          },
+        ]}
+      >
+        <View className="bg-[#020205]/95 border border-[#00F0FF]/30 rounded-2xl p-4 min-w-[220px] shadow-[0_10px_30px_rgba(0,240,255,0.15)] backdrop-blur-md">
+          <Text className="text-[#00F0FF] text-[10px] font-black uppercase tracking-[2px] mb-3 text-center">
+            {activePoint?.fullDate || ''}
+          </Text>
+          {activePoint?.breakdown.map((b: any, idx: number) => {
+            if (hiddenKeys.has(b.keyName)) return null;
+            return (
+              <View
+                key={idx}
+                className="flex-row items-center justify-between mb-1.5 gap-x-6"
+              >
+                <View className="flex-row items-center gap-x-2">
+                  <View
+                    style={{ backgroundColor: b.color }}
+                    className="w-2.5 h-2.5 rounded-full shadow-[0_0_5px]"
+                  />
+                  <Text className="font-mono text-[11px] text-white/80">
+                    {b.keyName}
                   </Text>
                 </View>
-              );
-            })}
-          </View>
-        </Animated.View>
-      )}
+                <Text className="text-[12px] font-black tracking-widest text-white">
+                  {b.tokens.toLocaleString()}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </Animated.View>
     </View>
   );
 };
 
-// ─── MODULE 2: ZERO-JUMP ANIMATED STACKED BAR CHART ──────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// MODULE 4: UPGRADED LED CAPSULE BAR CHART (Mobile Optimized)
+// ══════════════════════════════════════════════════════════════════════════════
 const AnimatedStackedBar = ({
   dataPoint,
   globalMaxMonthly,
@@ -530,70 +742,71 @@ const AnimatedStackedBar = ({
   onHoverIn,
   onHoverOut,
   hiddenKeys,
-}: {
-  dataPoint: ChartDataPoint;
-  globalMaxMonthly: number;
-  maxHeight: number;
-  isSelected: boolean;
-  onHoverIn: () => void;
-  onHoverOut: () => void;
-  hiddenKeys: Set<string>;
-}) => {
-  const visibleTotal = useMemo(() => {
-    return dataPoint.breakdown.reduce(
-      (sum, b) => (hiddenKeys.has(b.keyName) ? sum : sum + b.tokens),
-      0,
-    );
-  }, [dataPoint, hiddenKeys]);
+}: any) => {
+  const visibleTotal = useMemo(
+    () =>
+      dataPoint.breakdown.reduce(
+        (sum: number, b: any) =>
+          hiddenKeys.has(b.keyName) ? sum : sum + b.tokens,
+        0,
+      ),
+    [dataPoint, hiddenKeys],
+  );
 
   const animatedWrapperStyle = useAnimatedStyle(() => {
     const targetHeight =
-      globalMaxMonthly > 0
-        ? (dataPoint.total / globalMaxMonthly) * maxHeight
-        : 0;
-    const finalHeight = Math.max(targetHeight, dataPoint.total > 0 ? 8 : 0);
+      globalMaxMonthly > 0 ? (visibleTotal / globalMaxMonthly) * maxHeight : 0;
+    const finalHeight = Math.max(targetHeight, visibleTotal > 0 ? 12 : 0);
     return {
-      height: withSpring(finalHeight, { damping: 15, stiffness: 90 }),
-      opacity: withTiming(isSelected ? 1 : 0.5, { duration: 150 }),
+      height: withSpring(finalHeight, { damping: 18, stiffness: 100 }),
+      opacity: withTiming(isSelected || !isSelected ? 1 : 0.5, {
+        duration: 150,
+      }),
     };
   });
 
   return (
-    <View className="items-center justify-end flex-1 h-full mx-[2px] md:mx-1 max-w-[48px] relative">
+    // Removed strict max-w-[40px] to allow flex spreading on mobile
+    <View className="items-center justify-end flex-1 h-full mx-[2px] md:mx-[4px] relative">
       <Pressable
-        {...(Platform.OS === 'web'
+        {...(IS_WEB
           ? { onHoverIn, onHoverOut }
           : { onPressIn: onHoverIn, onPressOut: onHoverOut })}
         className="items-center justify-end w-full h-full"
       >
-        <View className="absolute bottom-0 w-full h-full bg-white/[0.015] rounded-t-lg border-x border-t border-white/[0.03]" />
+        {/* Ghost Track */}
+        <View className="absolute bottom-0 w-full h-full bg-white/[0.02] rounded-[10px] border border-white/[0.04]" />
 
+        {/* LED Stack Wrapper */}
         <Animated.View
           style={[
             animatedWrapperStyle,
             {
               width: '100%',
-              borderRadius: 6,
+              borderRadius: 10,
               overflow: 'hidden',
               justifyContent: 'flex-end',
               zIndex: 10,
+              padding: 2,
             },
           ]}
         >
-          {dataPoint.breakdown.map((segment, idx) => {
+          {dataPoint.breakdown.map((segment: any, idx: number) => {
             const isHidden = hiddenKeys.has(segment.keyName);
             const segmentHeightPct =
-              isHidden || dataPoint.total === 0
+              isHidden || visibleTotal === 0
                 ? 0
-                : (segment.tokens / dataPoint.total) * 100;
+                : (segment.tokens / visibleTotal) * 100;
             return (
               <Animated.View
                 key={idx}
                 style={useAnimatedStyle(() => ({
-                  height: withSpring(`${segmentHeightPct}%`, { damping: 15 }),
+                  height: withSpring(`${segmentHeightPct}%`, { damping: 18 }),
                   width: '100%',
                   backgroundColor: segment.color,
                   opacity: withTiming(isHidden ? 0 : 1),
+                  borderRadius: 6,
+                  marginBottom: 2,
                 }))}
               />
             );
@@ -601,7 +814,7 @@ const AnimatedStackedBar = ({
         </Animated.View>
 
         <Text
-          className={`absolute bottom-[-24px] text-[8px] md:text-[10px] uppercase tracking-wider transition-colors duration-200 ${isSelected ? 'text-[#8A2BE2] font-black' : 'text-white/30 font-bold'}`}
+          className={`absolute bottom-[-20px] text-[8px] md:text-[10px] uppercase tracking-wider transition-colors duration-200 ${isSelected ? 'text-[#8A2BE2] font-black' : 'text-white/30 font-bold'}`}
           numberOfLines={1}
         >
           {dataPoint.label}
@@ -609,49 +822,64 @@ const AnimatedStackedBar = ({
       </Pressable>
 
       {/* Floating Tooltip */}
-      {isSelected && visibleTotal > 0 && (
-        <Animated.View
-          entering={FadeInUp.springify().damping(15)}
-          className="absolute z-50 items-center mb-3 -translate-x-1/2 pointer-events-none bottom-full left-1/2"
-        >
-          <View className="bg-[#020205]/95 border border-[#8A2BE2]/40 rounded-2xl p-3 min-w-[180px] shadow-[0_10px_30px_rgba(138,43,226,0.15)] backdrop-blur-md">
-            <Text className="text-[#8A2BE2] text-[9px] font-black uppercase tracking-[2px] mb-2 text-center">
-              {dataPoint.fullDate}
-            </Text>
-            {dataPoint.breakdown.map((b, idx) => {
-              if (hiddenKeys.has(b.keyName)) return null;
-              return (
-                <View
-                  key={idx}
-                  className="flex-row items-center justify-between mb-1 gap-x-4"
-                >
-                  <View className="flex-row items-center gap-x-1.5">
-                    <View
-                      style={{ backgroundColor: b.color }}
-                      className="w-2 h-2 rounded-full"
-                    />
-                    <Text className="font-mono text-[9px] text-white/80">
-                      {b.keyName}
-                    </Text>
-                  </View>
-                  <Text className="text-[10px] font-black tracking-widest text-white">
-                    {b.tokens.toLocaleString()}
+      <Animated.View
+        style={[
+          useAnimatedStyle(() => ({
+            opacity: withTiming(isSelected && visibleTotal > 0 ? 1 : 0),
+          })),
+          {
+            position: 'absolute',
+            bottom: '100%',
+            left: '50%',
+            transform: [{ translateX: '-50%' }],
+            marginBottom: 12,
+            zIndex: 50,
+            pointerEvents: 'none',
+          },
+        ]}
+      >
+        <View className="bg-[#020205]/95 border border-[#8A2BE2]/40 rounded-2xl p-3 min-w-[180px] shadow-[0_10px_30px_rgba(138,43,226,0.15)] backdrop-blur-md">
+          <Text className="text-[#8A2BE2] text-[9px] font-black uppercase tracking-[2px] mb-2 text-center">
+            {dataPoint.fullDate}
+          </Text>
+          {dataPoint.breakdown.map((b: any, idx: number) => {
+            if (hiddenKeys.has(b.keyName)) return null;
+            return (
+              <View
+                key={idx}
+                className="flex-row items-center justify-between mb-1 gap-x-4"
+              >
+                <View className="flex-row items-center gap-x-1.5">
+                  <View
+                    style={{ backgroundColor: b.color }}
+                    className="w-2 h-2 rounded-full"
+                  />
+                  <Text className="font-mono text-[9px] text-white/80">
+                    {b.keyName}
                   </Text>
                 </View>
-              );
-            })}
-          </View>
-        </Animated.View>
-      )}
+                <Text className="text-[10px] font-black tracking-widest text-white">
+                  {b.tokens.toLocaleString()}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </Animated.View>
     </View>
   );
 };
 
-// ─── MAIN DASHBOARD COMPONENT ────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// MODULE 5: MAIN DASHBOARD COMPONENT
+// ══════════════════════════════════════════════════════════════════════════════
 export default function ApiKeysDashboard() {
   const router = useRouter();
   const { width: SCREEN_WIDTH } = Dimensions.get('window');
   const isMobile = SCREEN_WIDTH < 768;
+
+  // Dynamically scale max height for the bar chart so it looks good on all screens
+  const BAR_CHART_HEIGHT = isMobile ? 160 : 220;
 
   const [keys, setKeys] = useState<SystemKey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -689,7 +917,6 @@ export default function ApiKeysDashboard() {
         .from('usage_logs')
         .select('tokens_consumed, created_at, metadata')
         .gte('created_at', startOfYear.toISOString());
-
       if (logsError) throw logsError;
 
       const typedLogs = (rawLogs || []) as RawLog[];
@@ -717,9 +944,10 @@ export default function ApiKeysDashboard() {
     });
   };
 
-  const globalMaxMonthly = useMemo(() => {
-    return Math.max(...monthlyData.map((d) => d.total), 10);
-  }, [monthlyData]);
+  const globalMaxMonthly = useMemo(
+    () => Math.max(...monthlyData.map((d) => d.total), 10),
+    [monthlyData],
+  );
 
   const handleAddKey = async () => {
     if (!newKeyName || newKeyValue.length < 10)
@@ -758,16 +986,13 @@ export default function ApiKeysDashboard() {
     }
   };
 
-  // ─── UPGRADED LEGEND: Exact totals explicitly visible without hovering ───
   const ChartLegend = ({ chartData }: { chartData: ChartDataPoint[] }) => {
     const totals = useMemo(() => {
       const acc: Record<string, number> = {};
       allUniqueKeys.forEach((k) => (acc[k] = 0));
       chartData.forEach((d) => {
         d.breakdown.forEach((b) => {
-          if (acc[b.keyName] !== undefined) {
-            acc[b.keyName] += b.tokens;
-          }
+          if (acc[b.keyName] !== undefined) acc[b.keyName] += b.tokens;
         });
       });
       return acc;
@@ -779,10 +1004,7 @@ export default function ApiKeysDashboard() {
           const isHidden = hiddenKeys.has(keyName);
           const keyColor = getColorForKey(keyName);
           const totalTokens = totals[keyName] || 0;
-
-          // Don't render keys in the legend if they have 0 volume for this specific chart
           if (totalTokens === 0) return null;
-
           return (
             <TouchableOpacity
               key={keyName}
@@ -810,31 +1032,14 @@ export default function ApiKeysDashboard() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-[#020205]">
+    <SafeAreaView className="flex-1 bg-[#00000ffd]">
       {/* ─── RENDER AMBIENT ORB ENGINE BEHIND EVERYTHING ─── */}
-      <View className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        <AmbientOrb
-          color={THEME.cyan}
-          size={500}
-          top={-100}
-          left={-150}
-          delay={0}
-          opacity={0.08}
-        />
-        <AmbientOrb
-          color={THEME.purple}
-          size={600}
-          bottom={-200}
-          right={-200}
-          delay={1000}
-          opacity={0.06}
-        />
-      </View>
+      <AmbientArchitecture />
 
       {/* ─── FOREGROUND UI ─── */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="z-10 flex-1"
+        style={{ flex: 1, zIndex: 1, elevation: 1 }}
       >
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -849,36 +1054,33 @@ export default function ApiKeysDashboard() {
             width: '100%',
           }}
         >
-          {/* ─── HEADER ─── */}
+          {/* ─── TOP NAVIGATION & ANIMATED HEADER ─── */}
           <FadeIn delay={100} className="w-full mb-10">
-            <View className="relative flex-row items-center justify-center w-full h-16 mb-2">
+            <View className="relative flex-row items-center justify-center w-full h-16 mb-6">
+              {/* Back Button */}
               <TouchableOpacity
                 onPress={() => router.replace('/admin')}
                 className="absolute left-0 z-50 flex-row items-center py-2 gap-x-2 active:scale-95"
+                hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
               >
                 <ArrowBigLeftDash size={20} color={THEME.cyan} />
-                <Text className="text-[11px] font-black tracking-[4px] text-[#00F0FF] uppercase hidden md:flex">
-                  RETURN
-                </Text>
               </TouchableOpacity>
-              <View className="items-center justify-center pointer-events-none">
-                <Image
-                  source={require('../../../assets/api128.png')}
-                  style={{ width: 64, height: 64 }}
-                  resizeMode="contain"
-                />
+
+              {/* Animated SVG Header */}
+              <View className="items-center justify-center mt-10 pointer-events-none">
+                <AnimatedApiIcon />
+                <Text className="text-[10px] md:text-[12px] font-bold text-[#00F0FF]/60 uppercase tracking-[3px] mt-6 text-center">
+                  {keys.length} FALLBACK NODES
+                </Text>
               </View>
+
+              {/* Refresh Button */}
               <TouchableOpacity
                 onPress={fetchDashboardData}
                 className="absolute right-0 z-50 items-center justify-center w-10 h-10 border rounded-2xl bg-[#00F0FF]/10 border-[#00F0FF]/20 active:scale-95"
               >
                 <RefreshCcw size={16} color={THEME.cyan} />
               </TouchableOpacity>
-            </View>
-            <View className="items-center justify-center w-full mt-2">
-              <Text className="text-[9px] md:text-[12px] font-bold text-[#00F0FF]/60 uppercase tracking-[2px]">
-                {keys.length} FALLBACK NODES
-              </Text>
             </View>
           </FadeIn>
 
@@ -892,7 +1094,7 @@ export default function ApiKeysDashboard() {
             <>
               {/* ─── MODULE 1: DAILY VELOCITY CHART (MULTI-LINE) ─── */}
               <FadeIn delay={200}>
-                <GlassCard className="p-6 md:p-8 mb-8 border bg-white/[0.015] border-white/5 rounded-3xl md:rounded-[32px] overflow-visible">
+                <GlassCard className="p-6 md:p-8 mb-8 border bg-white/[0.015] border-white/5 rounded-3xl md:rounded-[32px] overflow-visible mt-16">
                   <View className="flex-row items-center mb-10 gap-x-3 md:mb-12">
                     <Activity size={24} color={THEME.danger} />
                     <Text className="text-sm font-black tracking-widest text-white uppercase md:text-base">
@@ -914,7 +1116,7 @@ export default function ApiKeysDashboard() {
                 </GlassCard>
               </FadeIn>
 
-              {/* ─── MODULE 2: MONTHLY VOLUME CHART (JAN -> DEC STACKED BARS) ─── */}
+              {/* ─── MODULE 2: MONTHLY VOLUME CHART (LED BARS) ─── */}
               <FadeIn delay={300}>
                 <GlassCard className="p-6 md:p-8 mb-8 border bg-white/[0.015] border-white/5 rounded-3xl md:rounded-[32px] overflow-visible">
                   <View className="flex-row items-center mb-10 gap-x-3 md:mb-12">
@@ -923,13 +1125,17 @@ export default function ApiKeysDashboard() {
                       Volume Aggregation (12M)
                     </Text>
                   </View>
-                  <View className="relative z-20 flex-row items-end justify-between h-64 px-1 pb-10 md:px-4">
+                  {/* Dynamic Height applied to the chart container */}
+                  <View
+                    style={{ height: BAR_CHART_HEIGHT }}
+                    className="relative z-20 flex-row items-end justify-between px-1 pb-10 md:px-4"
+                  >
                     {monthlyData.map((point, idx) => (
                       <AnimatedStackedBar
                         key={`monthly-${idx}`}
                         dataPoint={point}
                         globalMaxMonthly={globalMaxMonthly}
-                        maxHeight={200}
+                        maxHeight={BAR_CHART_HEIGHT - 40} // Prevent overflowing the container
                         isSelected={selectedMonthlyIdx === idx}
                         onHoverIn={() => setSelectedMonthlyIdx(idx)}
                         onHoverOut={() => setSelectedMonthlyIdx(null)}
@@ -945,7 +1151,7 @@ export default function ApiKeysDashboard() {
               <FadeIn delay={400}>
                 <GlassCard className="p-6 md:p-8 mb-8 border bg-white/[0.015] border-white/5 rounded-3xl md:rounded-[32px]">
                   <View className="flex-row items-center mb-8 gap-x-3">
-                    <ShieldCheck size={24} color={THEME.success} />
+                    <ShieldCheck size={24} color={THEME.green} />
                     <Text className="text-sm font-black tracking-widest text-white uppercase md:text-base">
                       Cascading Fallback Matrix
                     </Text>

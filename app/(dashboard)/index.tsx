@@ -3,15 +3,15 @@
  * VeraxAI Dashboard — Master Orchestration UI
  * ══════════════════════════════════════════════════════════════════════════════
  * PROTOCOL:
- * 1. NATIVE SVG: Bypasses Metro bundler crashes using react-native-svg.
- * 2. SINGLE CORE WAVE: Calm, 14-second pulsing wave emitting strictly from the center.
- * 3. GEOMETRIC PHYSICS: Hexagon, Tetrahedron, Diamond (Scaled down & slowed down).
- * 4. TOUCH SAFETY: StyleSheet.absoluteFill + pointerEvents="none" guarantees zero UI block.
- * 5. REALTIME DB SYNC: Listens to the `videos` table for live pipeline updates.
+ * 1. THE WANDERING CORE: A single, smooth-gliding cyan emitter.
+ * 2. SOLID WAVES: The waves are now SOLID, glowing pulses (no hollow rings).
+ * 3. DEEP NEBULA ENGINE: Soft, massive background blurs for depth.
+ * 4. TOUCH SAFETY: 110% APK touch-safe using pointerEvents="none" and zIndex:-1.
+ * 5. NATIVE SVG: Bypasses Metro bundler crashes using react-native-svg.
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -55,17 +55,11 @@ import Animated, {
 
 // ─── THEME CONSTANTS (Liquid Neon) ───────────────────────────────────────────
 const THEME = {
-  cyan: '#00B8C7',
-  purple: '#6D4AFF',
-  pink: '#FF007F',
-  green: '#1BA16F',
+  cyan: '#00F0FF',
+  purple: '#8A2BE2',
+  pink: '#800347',
+  green: '#008f66',
   obsidian: '#020205',
-  white: '#FFFFFF',
-  red: '#6b011a',
-  blue: '#00F0FF',
-  orange: '#FF6B3A',
-  lime: '#018c63',
-  yellow: '#FBBF24',
 };
 
 const IS_WEB = Platform.OS === 'web';
@@ -166,45 +160,95 @@ const AnimatedConverter = () => {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MODULE 1: CALM SINGLE-WAVE INTERFERENCE ENGINE
+// MODULE 1: AMBIENT ENGINE (Wandering Core + Nebula)
 // ══════════════════════════════════════════════════════════════════════════════
 
-interface RippleProps {
+const SingleRipple = React.memo(({ color, delay, duration, maxSize }: any) => {
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    progress.value = withDelay(
+      delay,
+      withRepeat(
+        withTiming(1, { duration, easing: Easing.out(Easing.sin) }),
+        -1,
+        false,
+      ),
+    );
+  }, []);
+  const animatedStyle = useAnimatedStyle(() => ({
+    width: interpolate(progress.value, [0, 1], [0, maxSize]),
+    height: interpolate(progress.value, [0, 1], [0, maxSize]),
+    borderRadius: interpolate(progress.value, [0, 1], [0, maxSize / 2]),
+    opacity: interpolate(progress.value, [0, 0.1, 0.8, 1], [0, 0.15, 0.02, 0]),
+    borderWidth: interpolate(progress.value, [0, 1], [60, 20]),
+  }));
+  return (
+    <Animated.View
+      style={[
+        {
+          position: 'absolute',
+          borderColor: color,
+          backgroundColor: 'transparent',
+        },
+        animatedStyle,
+      ]}
+    />
+  );
+});
+
+// ─── PART B: THE GLIDING CORE ───
+interface GlidingEmitterProps {
+  coreSize: number;
   color: string;
-  delay: number;
-  duration: number;
-  maxScale: number;
+  maxWaveSize: number;
+  waveCount: number;
+  baseDuration: number;
 }
 
-const SingleRipple = React.memo(
-  ({ color, delay, duration, maxScale }: RippleProps) => {
-    const progress = useSharedValue(0);
+const WanderingCore = memo(
+  ({
+    coreSize,
+    color,
+    maxWaveSize,
+    waveCount,
+    baseDuration,
+  }: GlidingEmitterProps) => {
+    const { width, height } = Dimensions.get('window');
+    const time = useSharedValue(0);
+    const stagger = baseDuration / waveCount;
 
-    useEffect(() => {
-      progress.value = withDelay(
-        delay,
-        withRepeat(
-          withTiming(1, { duration, easing: Easing.out(Easing.sin) }),
-          -1,
-          false, // Instantly resets to 0 to spawn the next ripple
-        ),
-      );
-    }, [delay, duration, progress]);
+    // 120fps UI-Thread Logic for ultra-smooth gliding
+    useFrameCallback((frameInfo) => {
+      if (frameInfo.timeSincePreviousFrame === null) return;
+      time.value += frameInfo.timeSincePreviousFrame / 3000;
+    });
 
-    const animatedStyle = useAnimatedStyle(() => {
+    // Moves the core in a sleek infinity loop
+    const animatedPosition = useAnimatedStyle(() => {
+      const xOffset = Math.sin(time.value * 0.4) * (width * 0.3);
+      const yOffset = Math.cos(time.value * 0.3) * (height * 0.2);
+
       return {
         transform: [
-          { scale: interpolate(progress.value, [0, 1], [1, maxScale]) },
+          { translateX: width / 2 + xOffset },
+          { translateY: height / 2 + yOffset },
         ],
-        // Fades up gently to 0.3 opacity, then softly fades out
-        opacity: interpolate(
-          progress.value,
-          [0, 0.1, 0.6, 1],
-          [0, 0.3, 0.05, 0],
-        ),
-        borderWidth: interpolate(progress.value, [0, 1], [2, 2]),
       };
     });
+
+    const corePulse = useSharedValue(0.4);
+    useEffect(() => {
+      corePulse.value = withRepeat(
+        withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.sin) }),
+        -1,
+        true,
+      );
+    }, []);
+
+    const coreStyle = useAnimatedStyle(() => ({
+      opacity: interpolate(corePulse.value, [0.4, 1], [0.4, 1]),
+      transform: [{ scale: interpolate(corePulse.value, [0.4, 1], [0.5, 1]) }],
+    }));
 
     return (
       <Animated.View
@@ -213,71 +257,13 @@ const SingleRipple = React.memo(
             position: 'absolute',
             top: 0,
             left: 0,
-            right: 0,
-            bottom: 0,
-            borderRadius: 9999,
-            borderColor: color,
-            backgroundColor: 'transparent',
+            width: 0,
+            height: 0,
+            alignItems: 'center',
+            justifyContent: 'center',
           },
-          animatedStyle,
+          animatedPosition,
         ]}
-      />
-    );
-  },
-);
-SingleRipple.displayName = 'SingleRipple';
-
-interface EmitterProps {
-  centerX: number;
-  centerY: number;
-  coreSize: number;
-  color: string;
-  maxWaveSize: number;
-  waveCount: number;
-  baseDuration: number;
-}
-
-const WaveEmitter = React.memo(
-  ({
-    centerX,
-    centerY,
-    coreSize,
-    color,
-    maxWaveSize,
-    waveCount,
-    baseDuration,
-  }: EmitterProps) => {
-    const stagger = baseDuration / waveCount;
-    const maxScale = maxWaveSize / coreSize;
-
-    const corePulse = useSharedValue(0.4);
-
-    useEffect(() => {
-      corePulse.value = withRepeat(
-        withTiming(1, { duration: 6000, easing: Easing.inOut(Easing.sin) }),
-        -1,
-        true,
-      );
-    }, []);
-
-    const coreStyle = useAnimatedStyle(() => ({
-      opacity: interpolate(corePulse.value, [0.4, 1], [0.4, 1.8]),
-      transform: [
-        { scale: interpolate(corePulse.value, [0.4, 1], [0.45, 1.4]) },
-      ],
-    }));
-
-    return (
-      <View
-        style={{
-          position: 'absolute',
-          left: centerX - coreSize / 2,
-          top: centerY - coreSize / 2,
-          width: coreSize,
-          height: coreSize,
-          justifyContent: 'center',
-          alignItems: 'center',
-        }}
       >
         {Array.from({ length: waveCount }).map((_, index) => (
           <SingleRipple
@@ -285,7 +271,7 @@ const WaveEmitter = React.memo(
             color={color}
             delay={index * stagger}
             duration={baseDuration}
-            maxScale={maxScale}
+            maxSize={maxWaveSize}
           />
         ))}
 
@@ -298,227 +284,127 @@ const WaveEmitter = React.memo(
               borderRadius: coreSize / 2,
               backgroundColor: color,
               shadowColor: color,
-              shadowRadius: 12,
+              shadowRadius: 15,
               shadowOpacity: 1,
               shadowOffset: { width: 0, height: 0 },
               ...(IS_WEB ? ({ boxShadow: `0 0 20px ${color}` } as any) : {}),
             },
           ]}
         />
-      </View>
-    );
-  },
-);
-WaveEmitter.displayName = 'WaveEmitter';
-
-// ══════════════════════════════════════════════════════════════════════════════
-// MODULE 2: GEOMETRIC PHYSICS ENGINE (Hexagon, Tetrahedron, Diamond)
-// ══════════════════════════════════════════════════════════════════════════════
-// ══════════════════════════════════════════════════════════════════════════════
-// MODULE 2: GEOMETRIC PHYSICS ENGINE (True 3D Wireframes)
-// ══════════════════════════════════════════════════════════════════════════════
-
-interface GeometricShapeProps {
-  type: 'hexagon' | 'tetrahedron' | 'diamond';
-  color: string;
-  size: number;
-  initialX: number;
-  initialY: number;
-  velocityX: number;
-  velocityY: number;
-  rotationSpeed: number;
-}
-
-const FloatingShape = React.memo(
-  ({
-    type,
-    color,
-    size,
-    initialX,
-    initialY,
-    velocityX,
-    velocityY,
-    rotationSpeed,
-  }: GeometricShapeProps) => {
-    const { width, height } = Dimensions.get('window');
-
-    const x = useSharedValue(initialX);
-    const y = useSharedValue(initialY);
-    const rot = useSharedValue(0);
-
-    // 120fps UI Thread loop. Speeds boosted for elegant, visible drifting.
-    useFrameCallback((frameInfo) => {
-      if (frameInfo.timeSincePreviousFrame === null) return;
-      const dt = frameInfo.timeSincePreviousFrame / 16.66; // Normalize to 60fps delta
-
-      x.value += velocityX * dt;
-      y.value += velocityY * dt;
-      rot.value += rotationSpeed * dt;
-
-      // Smooth Boundary Wrap (Infinite flow off-screen)
-      if (x.value < -size * 2) x.value = width + size;
-      if (x.value > width + size * 2) x.value = -size;
-      if (y.value < -size * 2) y.value = height + size;
-      if (y.value > height + size * 2) y.value = -size;
-    });
-
-    const animatedStyle = useAnimatedStyle(() => {
-      return {
-        transform: [
-          { translateX: x.value },
-          { translateY: y.value },
-          { rotate: `${rot.value}deg` },
-        ],
-      };
-    });
-
-    const renderShape = () => {
-      switch (type) {
-        case 'hexagon': // Isometric 3D Cube
-          return (
-            <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-              <Path d="M 50 5 L 89 27.5 L 89 72.5 L 50 95 L 11 72.5 L 11 27.5 Z" stroke={color} strokeWidth="1.5" opacity="0.6" />
-              <Path d="M 50 50 L 50 95" stroke={color} strokeWidth="1.5" opacity="0.6" />
-              <Path d="M 50 50 L 11 27.5" stroke={color} strokeWidth="1.5" opacity="0.6" />
-              <Path d="M 50 50 L 89 27.5" stroke={color} strokeWidth="1.5" opacity="0.6" />
-            </Svg>
-          );
-        case 'diamond': // Multi-faceted 3D Gem (FIXED VIEWBOX)
-          return (
-            <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-              <Path d="M 50 5 L 90 40 L 50 95 L 10 40 Z" stroke={color} strokeWidth="1.5" opacity="0.6" />
-              <Path d="M 10 40 L 90 40" stroke={color} strokeWidth="1.5" opacity="0.6" />
-              <Path d="M 50 5 L 30 40 L 50 95" stroke={color} strokeWidth="1.5" opacity="0.6" />
-              <Path d="M 50 5 L 70 40 L 50 95" stroke={color} strokeWidth="1.5" opacity="0.6" />
-            </Svg>
-          );
-        case 'tetrahedron': // Translucent 4-vertex 3D Pyramid
-          return (
-            <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-              <Path d="M 50 10 L 15 80 L 85 80 Z" stroke={color} strokeWidth="1.5" opacity="0.6" />
-              <Path d="M 50 10 L 50 65 L 15 80" stroke={color} strokeWidth="1.5" opacity="0.6" />
-              <Path d="M 50 65 L 85 80" stroke={color} strokeWidth="1.5" opacity="0.6" />
-            </Svg>
-          );
-      }
-    };
-
-    return (
-      <Animated.View
-        pointerEvents="none"
-        style={[{ position: 'absolute', top: 0, left: 0 }, animatedStyle]}
-      >
-        {renderShape()}
       </Animated.View>
     );
   },
 );
-FloatingShape.displayName = 'FloatingShape';
+WanderingCore.displayName = 'WanderingCore';
+
+// ─── PART C: THE DEEP NEBULA (From Settings) ───
+const OrganicOrb = memo(
+  ({
+    color,
+    size,
+    initialX,
+    initialY,
+    speedX,
+    speedY,
+    phaseOffsetX,
+    phaseOffsetY,
+    opacityBase,
+  }: any) => {
+    const { width, height } = Dimensions.get('window');
+    const time = useSharedValue(0);
+
+    useFrameCallback((frameInfo) => {
+      if (frameInfo.timeSincePreviousFrame === null) return;
+      time.value += frameInfo.timeSincePreviousFrame / 1000;
+    });
+
+    const animatedStyle = useAnimatedStyle(() => {
+      const xOffset =
+        Math.sin(time.value * speedX + phaseOffsetX) * (width * 0.3);
+      const yOffset =
+        Math.cos(time.value * speedY + phaseOffsetY) * (height * 0.2);
+      const breathe = 1 + Math.sin(time.value * 0.5) * 0.15;
+
+      return {
+        transform: [
+          { translateX: initialX + xOffset },
+          { translateY: initialY + yOffset },
+          { scale: breathe },
+        ],
+        opacity: opacityBase + Math.sin(time.value * 0.5) * 0.02,
+      };
+    });
+
+    return (
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          {
+            position: 'absolute',
+            top: -size / 2,
+            left: -size / 2,
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            backgroundColor: color,
+            ...(IS_WEB ? ({ filter: 'blur(60px)' } as any) : {}),
+          },
+          animatedStyle,
+        ]}
+      />
+    );
+  },
+);
+OrganicOrb.displayName = 'OrganicOrb';
 
 // ─── MASTER AMBIENT CONTROLLER ───
-const AmbientArchitecture = React.memo(() => {
+const AmbientArchitecture = memo(() => {
   const { width, height } = Dimensions.get('window');
   const isDesktop = width >= 1024;
-
-  // Anchors - SINGLE Wave exactly centered behind the SVG Vault icon
-  const primaryX = width / 2;
-  const primaryY = Platform.OS === 'ios' ? 100 : 200;
-
-  const massiveWaveRadius = isDesktop ? width * 0.3 : height * 0.6;
-  const GLOBAL_WAVE_DURATION = 14000;
+  const massiveWaveRadius = isDesktop ? width * 0.4 : height * 1.0;
 
   return (
+    // CRITICAL: pointerEvents="none" guarantees zero touch overlap
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {/* ── ONLY ONE WAVE EMITTER (Anchored behind the Vault) ── */}
-      <WaveEmitter
-        centerX={primaryX}
-        centerY={primaryY}
-        coreSize={isDesktop ? 10 : 6}
-        color={THEME.blue} // Core Wave
-        maxWaveSize={massiveWaveRadius}
-        waveCount={1}
-        baseDuration={GLOBAL_WAVE_DURATION}
+      {/* LAYER 1: Deep Nebula Background (From Settings - Soft and elegant) */}
+      <OrganicOrb
+        color={THEME.green}
+        size={width * 0.6}
+        initialX={width * 0.8}
+        initialY={height * 0.6}
+        speedX={0.15}
+        speedY={0.2}
+        phaseOffsetX={Math.PI}
+        phaseOffsetY={0}
+        opacityBase={0.06}
       />
-
-      {/* ── 6 3D WIREFRAME SHAPES (Perfectly Scattered & Flowing) ── */}
-      
-      {/* ZONE 1: Top Left - Gliding down and right */}
-      <FloatingShape
-        type="hexagon"
-        color={THEME.blue}
-        size={55}
-        initialX={width * 0.15}
-        initialY={height * 0.15}
-        velocityX={0.15} 
-        velocityY={0.12}
-        rotationSpeed={0.4}
-      />
-
-      {/* ZONE 2: Bottom Right - Drifting up and left */}
-      <FloatingShape
-        type="tetrahedron"
-        color={THEME.pink}
-        size={60}
-        initialX={width * 0.85}
-        initialY={height * 0.85}
-        velocityX={-0.12}
-        velocityY={-0.18}
-        rotationSpeed={-0.5}
-      />
-
-      {/* ZONE 3: Top Right - Sinking slowly */}
-      <FloatingShape
-        type="diamond"
+      <OrganicOrb
         color={THEME.cyan}
-        size={45}
-        initialX={width * 0.80}
-        initialY={height * 0.20}
-        velocityX={-0.10}
-        velocityY={0.20}
-        rotationSpeed={0.6}
+        size={width * 0.4}
+        initialX={width * 0.5}
+        initialY={height * 0.8}
+        speedX={0.25}
+        speedY={0.1}
+        phaseOffsetX={Math.PI / 4}
+        phaseOffsetY={Math.PI}
+        opacityBase={0.04}
       />
 
-      {/* ZONE 4: Bottom Left - Rising gracefully */}
-      <FloatingShape
-        type="hexagon"
-        color={THEME.lime}
-        size={50}
-        initialX={width * 0.15}
-        initialY={height * 0.80}
-        velocityX={0.14}
-        velocityY={-0.15}
-        rotationSpeed={-0.4}
-      />
-
-      {/* ZONE 5: Mid-Left Edge - Drifting across horizontally */}
-      <FloatingShape
-        type="tetrahedron"
-        color={THEME.orange}
-        size={55}
-        initialX={width * 0.05}
-        initialY={height * 0.50}
-        velocityX={0.20}
-        velocityY={0.05}
-        rotationSpeed={0.5}
-      />
-
-      {/* ZONE 6: Mid-Right Edge - Pushing inwards */}
-      <FloatingShape
-        type="diamond"
-        color={THEME.red}
-        size={48}
-        initialX={width * 0.95}
-        initialY={height * 0.50}
-        velocityX={-0.18}
-        velocityY={-0.08}
-        rotationSpeed={-0.7}
+      {/* LAYER 2: The Wandering Core with Solid Glowing Waves */}
+      <WanderingCore
+        coreSize={14}
+        color="#02AABC" // Cyan Core
+        maxWaveSize={massiveWaveRadius}
+        waveCount={4} // 4 simultaneous pulses fading as they grow
+        baseDuration={12000} // 12 seconds for a wave to fully expand
       />
     </View>
   );
 });
 AmbientArchitecture.displayName = 'AmbientArchitecture';
+
 // ══════════════════════════════════════════════════════════════════════════════
-// MODULE 3: DASHBOARD UI & INPUT ROUTING
+// MODULE 2: DASHBOARD UI & INPUT ROUTING
 // ══════════════════════════════════════════════════════════════════════════════
 
 interface PipelineStatus {
@@ -746,10 +632,17 @@ export default function DashboardScreen() {
     (mutationError as Error)?.message || videoData?.error_message;
 
   return (
-    <SafeAreaView className="flex-1 bg-[#01091ae7]">
+    <SafeAreaView className="flex-1 bg-[#010114]">
       {/* ── THE ISOLATED AMBIENT KERNEL ── */}
-      {/* This renders UNDER everything and physically cannot intercept gestures */}
-      <AmbientArchitecture />
+      {/* 110% Touch Safe. zIndex: -1 forces it behind everything, pointerEvents="none" turns off touches */}
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          { pointerEvents: 'none', overflow: 'hidden', zIndex: -1 },
+        ]}
+      >
+        <AmbientArchitecture />
+      </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -771,7 +664,7 @@ export default function DashboardScreen() {
               <View className="items-center mb-10 md:mb-16">
                 <View className="flex-row items-center gap-3 px-4 py-2 mb-4 border rounded-full bg-gradient-to-r from-[#00F0FF]/30 to-[#8A2BE2]/30 border-white/10">
                   <SmallBadgeIcon width={20} height={20} color={THEME.cyan} />
-                  <Text className="text-sm font-bold tracking-wide text-[#00a2ff]">
+                  <Text className="text-sm font-bold tracking-wide text-[#00F0FF]">
                     VeraxAI Engine 1.0
                   </Text>
                 </View>
@@ -920,12 +813,12 @@ export default function DashboardScreen() {
                     onPress={handleProcessVideo}
                     isLoading={effectivelyLoading}
                     variant="primary"
-                    className="py-5 mt-8 bg-[#1E3A8A] shadow-[0_0_15px_rgba(138,43,226,0.5)] md:py-6 rounded-xl"
+                    className="py-5 mt-8 bg-[#1E3A8A] shadow-[0_0_15px_rgba(30,58,138,0.5)] md:py-6 rounded-xl"
                   />
 
                   {displayError && (
                     <View className="p-5 mt-6 border bg-rose-500/10 border-rose-500/20 rounded-2xl">
-                      <Text className="mb-2 text-xs font-bold tracking-widest text-pink-400 uppercase">
+                      <Text className="mb-2 text-xs font-bold tracking-widest uppercase text-rose-400">
                         Error Encountered
                       </Text>
                       <Text className="text-sm leading-5 text-rose-300/80">
